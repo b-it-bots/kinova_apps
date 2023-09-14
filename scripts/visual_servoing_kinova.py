@@ -27,15 +27,28 @@ import kortex_driver.msg
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 import cv2
-from robothon2023.full_arm_movement import FullArmMovement
+from kinova_apps.full_arm_movement import FullArmMovement
+
 
 class WrenchTest(object):
     def __init__(self):
         self.arm = FullArmMovement()
-        self.sub = rospy.Subscriber('/my_gen3/base_feedback', kortex_driver.msg.BaseCyclic_Feedback, self.base_feedback_cb)
-        self.pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', kortex_driver.msg.TwistCommand, queue_size=1)
-        self.img_sub = rospy.Subscriber('/camera/color/image_raw', Image, self.image_cb)
-        self.img_pub = rospy.Publisher('/visual_servoing_debug_img', Image, queue_size=10)
+        self.sub = rospy.Subscriber(
+            "/my_gen3/base_feedback",
+            kortex_driver.msg.BaseCyclic_Feedback,
+            self.base_feedback_cb,
+        )
+        self.pub = rospy.Publisher(
+            "/my_gen3/in/cartesian_velocity",
+            kortex_driver.msg.TwistCommand,
+            queue_size=1,
+        )
+        self.img_sub = rospy.Subscriber(
+            "/camera/color/image_raw", Image, self.image_cb
+        )
+        self.img_pub = rospy.Publisher(
+            "/visual_servoing_debug_img", Image, queue_size=10
+        )
         self.loop_rate = rospy.Rate(3.0)
         self.current_force_z = []
         self.bridge = CvBridge()
@@ -61,7 +74,10 @@ class WrenchTest(object):
                 continue
             msg = kortex_driver.msg.TwistCommand()
             msg.twist.linear_z = -0.01
-            if abs(np.mean(self.current_force_z) - self.current_force_z[-1]) > 3.0:
+            if (
+                abs(np.mean(self.current_force_z) - self.current_force_z[-1])
+                > 3.0
+            ):
                 stop = True
                 msg.twist.linear_z = 0.0
             self.pub.publish(msg)
@@ -76,9 +92,8 @@ class WrenchTest(object):
         msg.twist.linear_z = 0.0
         self.pub.publish(msg)
         self.loop_rate.sleep()
-    
-    def move(self, direction):
 
+    def move(self, direction):
         msg = kortex_driver.msg.TwistCommand()
         if direction == 0:
             rospy.loginfo("Stopped moving")
@@ -96,7 +111,6 @@ class WrenchTest(object):
             rospy.loginfo("Invalid direction")
 
     def image_cb(self, msg):
-        
         # get the image from the message
         try:
             image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
@@ -108,20 +122,18 @@ class WrenchTest(object):
             self.image_queue.pop(0)
         self.image_queue.append(image)
 
-
     def run_visual_servoing(self):
         while not rospy.is_shutdown():
-            
             if len(self.image_queue) == 0:
                 self.loop_rate.sleep()
                 continue
-            
+
             image = self.image_queue[-1]
 
             circularity_threshold = 0.8
             contours_area_threshold = 100
             black_color_threshold = 60
-            
+
             # find the contours
             # convert the image to grayscale
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -131,16 +143,23 @@ class WrenchTest(object):
             canny = cv2.Canny(blur, 50, 150)
             # find the contours
             contours, _ = cv2.findContours(
-                canny, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                canny, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+            )
 
             # draw a horizontal line in the middle of the image
-            horizontal_line = [(0, image.shape[0] // 2),
-                            (image.shape[1], image.shape[0] // 2)]
-            cv2.line(image, horizontal_line[0], horizontal_line[1], (0, 0, 255), 2)
+            horizontal_line = [
+                (0, image.shape[0] // 2),
+                (image.shape[1], image.shape[0] // 2),
+            ]
+            cv2.line(
+                image, horizontal_line[0], horizontal_line[1], (0, 0, 255), 2
+            )
 
             # draw a vertical line in the middle of the image
-            vertical_line = [(image.shape[1] // 2, 0),
-                            (image.shape[1] // 2, image.shape[0])]
+            vertical_line = [
+                (image.shape[1] // 2, 0),
+                (image.shape[1] // 2, image.shape[0]),
+            ]
             cv2.line(image, vertical_line[0], vertical_line[1], (0, 0, 255), 2)
 
             # filter out black contours
@@ -148,7 +167,6 @@ class WrenchTest(object):
             mean_colors = []
             circularities = []
             for contour in contours:
-
                 # Calculate area and perimeter of the contour
                 area = cv2.contourArea(contour)
                 perimeter = cv2.arcLength(contour, True)
@@ -158,7 +176,7 @@ class WrenchTest(object):
                     continue
 
                 # Calculate circularity of the contour (reference: https://en.wikipedia.org/wiki/Roundness)
-                circularity = (4 * np.pi * area) / (perimeter ** 2)
+                circularity = (4 * np.pi * area) / (perimeter**2)
 
                 # create a mask of the contour
                 n_mask = np.zeros(image.shape[:2], dtype="uint8")
@@ -169,7 +187,10 @@ class WrenchTest(object):
 
                 # filter out non black contours
                 # threshold the circularity value to classify the contour as circular or not
-                if mean_color[0] < black_color_threshold and circularity > circularity_threshold:
+                if (
+                    mean_color[0] < black_color_threshold
+                    and circularity > circularity_threshold
+                ):
                     filtered_contours.append(contour)
                     mean_colors.append(mean_color[0])
                     circularities.append(circularity)
@@ -219,7 +240,9 @@ class WrenchTest(object):
 
     def move_down(self):
         rospy.loginfo("Moving down")
-        pre_height_above_button = rospy.get_param("~pre_height_above_button", 1.00)
+        pre_height_above_button = rospy.get_param(
+            "~pre_height_above_button", 1.00
+        )
         msg = kortex_driver.msg.TwistCommand()
         msg.twist.linear_z = pre_height_above_button - 0.02
         self.pub.publish(msg)
@@ -229,23 +252,26 @@ class WrenchTest(object):
 
     def close_gripper(self):
         rospy.loginfo("Closing gripper")
-        # self.arm.execute_gripper_command(0.35) #Open the gripper 
-        #self.arm.example_send_gripper_command(0.5) #half close the gripper 
-        self.arm.execute_gripper_command(0.5) #full close the gripper 
+        # self.arm.execute_gripper_command(0.35) #Open the gripper
+        # self.arm.example_send_gripper_command(0.5) #half close the gripper
+        self.arm.execute_gripper_command(0.5)  # full close the gripper
         rospy.sleep(0.1)
         return True
 
     def move_up(self):
         rospy.loginfo("Moving up")
-        pre_height_above_button = rospy.get_param("~pre_height_above_button", 1.00)
+        pre_height_above_button = rospy.get_param(
+            "~pre_height_above_button", 1.00
+        )
         msg = kortex_driver.msg.TwistCommand()
         msg.twist.linear_z = -pre_height_above_button
         self.pub.publish(msg)
         self.loop_rate.sleep()
         return True
 
+
 def main():
-    rospy.init_node('visual_servoing_kinova')
+    rospy.init_node("visual_servoing_kinova")
     wt = WrenchTest()
     servoing_flag = wt.run_visual_servoing()
     if servoing_flag:
@@ -260,9 +286,9 @@ def main():
                     rospy.signal_shutdown("Visual Servoing is done!")
 
     try:
-      rospy.spin()
+        rospy.spin()
     except KeyboardInterrupt:
-      print("Shutting down")
+        print("Shutting down")
 
 
 if __name__ == "__main__":

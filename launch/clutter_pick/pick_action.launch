@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+
+<launch>
+    <!-- Robot namespace -->
+    <arg name="robot_name" default="my_gen3" />
+    <!-- <arg name="pose_input" default="/pcl_closest_obj/output_pose" /> -->
+    <arg name="start_delay_seconds" default="0" />
+
+    <node pkg="kinova_apps" type="pick_action_test.py" name="pick_test" output="screen">
+        <rosparam command="load" file="$(find kinova_apps)/config/joint_angles.yaml" />
+        <!-- <rosparam command="load" file="$(find kinova_apps)/config/boundary_safety.yaml" />
+        <rosparam command="load" file="$(find kinova_apps)/config/task_params.yaml" />
+        <rosparam command="load" file="$(find kinova_apps)/config/trajectories.yaml" />
+        <rosparam command="load" file="$(find kinova_apps)/config/door_open_trajectories.yaml" />
+        <rosparam command="load" file="$(find kinova_apps)/config/probe_action.yaml" />
+        <remap from="~pose_in" to="$(arg pose_input)" /> -->
+    </node>
+</launch>

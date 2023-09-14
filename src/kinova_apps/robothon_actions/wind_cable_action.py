@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 
 import rospy
-from robothon2023.abstract_action import AbstractAction
-from robothon2023.full_arm_movement import FullArmMovement
-from robothon2023.transform_utils import TransformUtils
-from utils.kinova_pose import get_kinovapose_from_list, get_kinovapose_from_pose_stamped
+from kinova_apps.abstract_action import AbstractAction
+from kinova_apps.full_arm_movement import FullArmMovement
+from utils.transform_utils import TransformUtils
+from utils.kinova_pose import (
+    get_kinovapose_from_list,
+    get_kinovapose_from_pose_stamped,
+)
 from geometry_msgs.msg import PoseStamped, Quaternion
 from kortex_driver.srv import *
 from kortex_driver.msg import *
@@ -19,30 +22,40 @@ import datetime
 import pdb
 import yolov5
 
+
 class WindCableAction(AbstractAction):
-    def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils) -> None:
+    def __init__(
+        self, arm: FullArmMovement, transform_utils: TransformUtils
+    ) -> None:
         super().__init__(arm, transform_utils)
         self.debug = rospy.get_param("~debug", False)
         self.img_sub = rospy.Subscriber(
-            '/camera/color/image_raw', Image, self.image_cb)
+            "/camera/color/image_raw", Image, self.image_cb
+        )
         self.img_pub = rospy.Publisher(
-            '/visual_servoing_debug_img', Image, queue_size=10)
+            "/visual_servoing_debug_img", Image, queue_size=10
+        )
         self.image = None
         self.loop_rate = rospy.Rate(10)
         self.bridge = CvBridge()
-        self.cart_vel_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', kortex_driver.msg.TwistCommand, queue_size=1)
+        self.cart_vel_pub = rospy.Publisher(
+            "/my_gen3/in/cartesian_velocity",
+            kortex_driver.msg.TwistCommand,
+            queue_size=1,
+        )
         self.model = yolov5.load(
-            '/home/b-it-bots/robothon_ros_workspace/src/robothon2023/models/probe_holder_horizontal/probe_holder_horizontal_nano_ver2.pt')
+            "/home/b-it-bots/robothon_ros_workspace/src/kinova_apps/models/probe_holder_horizontal/probe_holder_horizontal_nano_ver2.pt"
+        )
         self.model_params()
-        self.save_debug_image_dir = '/home/b-it-bots/temp/robothon/windCable'
+        self.save_debug_image_dir = "/home/b-it-bots/temp/robothon/windCable"
 
     def pre_perceive(self) -> bool:
-        print ("in pre perceive")        
+        print("in pre perceive")
 
         # pre-perceive pose
 
         self.arm.execute_gripper_command(0.35)
-        
+
         # get the pre-perceive pose from tf
         # msg = PoseStamped()
         # msg.header.frame_id = "wind_cable_link"
@@ -59,11 +72,10 @@ class WindCableAction(AbstractAction):
         # if not self.arm.send_cartesian_pose(kp):
         #     rospy.logerr("Failed to send pre-perceive pose to arm")
         #     return False
-        
+
         return True
 
     def act(self) -> bool:
-        
         # start visual servoing
         # rospy.loginfo("Starting visual servoing")
         # # TODO: fix the visual servoing
@@ -75,24 +87,24 @@ class WindCableAction(AbstractAction):
 
         # if not self.arm.send_cartesian_pose(kp):
         #     return False
-        
+
         # self.arm.execute_gripper_command(1.0)
 
         # if not success:
         #     return False
-        
+
         # wind cable
-        rospy.loginfo('[wind action] starting winding')
+        rospy.loginfo("[wind action] starting winding")
         success = self.wind_cable()
-        
+
         if not success:
             return False
 
         pose_for_tucking_kp = self.find_and_save_tucking_pose()
-        
+
         # pick probe from holder
         success = self.pick_probe_from_holder()
-        
+
         if not success:
             return False
 
@@ -100,15 +112,13 @@ class WindCableAction(AbstractAction):
         rospy.loginfo("Tucking probe into board")
         success = self.tuck_probe_into_board(pose_for_tucking_kp)
 
-
         return success
 
     def verify(self) -> bool:
-        print ("in verify")
+        print("in verify")
         return True
-    
-    def image_cb(self, msg):
 
+    def image_cb(self, msg):
         # get the image from the message
         try:
             image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
@@ -128,15 +138,16 @@ class WindCableAction(AbstractAction):
         msg.pose.orientation.w = pose[6]
 
         # convert to base_link frame
-        msg_in_base = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
+        msg_in_base = self.transform_utils.transformed_pose_with_retries(
+            msg, "base_link"
+        )
 
         # convert to kinova_pose
         kp = get_kinovapose_from_pose_stamped(msg_in_base)
 
         return kp
-    
-    def wind_cable(self) -> bool:
 
+    def wind_cable(self) -> bool:
         # go and pick at board
         self.arm.execute_gripper_command(0.6)
 
@@ -193,9 +204,8 @@ class WindCableAction(AbstractAction):
         current_pose.z += 0.1
         self.arm.send_cartesian_pose(current_pose)
         return True
-    
+
     def pick_probe_from_holder(self):
-        
         # # go to the probe pick perceive position above the holder
         self.arm.execute_gripper_command(0.35)
 
@@ -203,45 +213,71 @@ class WindCableAction(AbstractAction):
         current_pose.z += 0.05
         self.arm.send_cartesian_pose(current_pose)
 
-        perceive_board_pose = rospy.get_param("~joint_angles/perceive_board_pose")
+        perceive_board_pose = rospy.get_param(
+            "~joint_angles/perceive_board_pose"
+        )
         success = self.arm.send_joint_angles(perceive_board_pose)
 
-        safe_pose_after_probe_placement = rospy.get_param("~probe_action_poses/safe_pose_after_probe_placement")
-        safe_pose_after_probe_placement = get_kinovapose_from_list(safe_pose_after_probe_placement)
-        rospy.loginfo("[probe_action] moving to safe pose after probe placement")
-        success = self.arm.send_cartesian_pose(safe_pose_after_probe_placement, max_lin_vel=0.05)
+        safe_pose_after_probe_placement = rospy.get_param(
+            "~probe_action_poses/safe_pose_after_probe_placement"
+        )
+        safe_pose_after_probe_placement = get_kinovapose_from_list(
+            safe_pose_after_probe_placement
+        )
+        rospy.loginfo(
+            "[probe_action] moving to safe pose after probe placement"
+        )
+        success = self.arm.send_cartesian_pose(
+            safe_pose_after_probe_placement, max_lin_vel=0.05
+        )
 
-        probe_place_pre_holder_pose = rospy.get_param("~probe_action_poses/probe_place_pre_holder_pose")
-        probe_place_pre_holder_pose = get_kinovapose_from_list(probe_place_pre_holder_pose)
+        probe_place_pre_holder_pose = rospy.get_param(
+            "~probe_action_poses/probe_place_pre_holder_pose"
+        )
+        probe_place_pre_holder_pose = get_kinovapose_from_list(
+            probe_place_pre_holder_pose
+        )
         rospy.loginfo("[probe_action] moving to probe place pre holder")
-        success = self.arm.send_cartesian_pose(probe_place_pre_holder_pose, max_lin_vel=0.05)
+        success = self.arm.send_cartesian_pose(
+            probe_place_pre_holder_pose, max_lin_vel=0.05
+        )
 
-        tucking_probe_holder_pick = rospy.get_param("~probe_action_poses/tucking_probe_holder_pick")
-        tucking_probe_holder_pick = get_kinovapose_from_list(tucking_probe_holder_pick)
+        tucking_probe_holder_pick = rospy.get_param(
+            "~probe_action_poses/tucking_probe_holder_pick"
+        )
+        tucking_probe_holder_pick = get_kinovapose_from_list(
+            tucking_probe_holder_pick
+        )
         rospy.loginfo("[probe_action] moving to probe place holder position")
-        success = self.arm.send_cartesian_pose(tucking_probe_holder_pick, max_lin_vel=0.05)
+        success = self.arm.send_cartesian_pose(
+            tucking_probe_holder_pick, max_lin_vel=0.05
+        )
         if not success:
-            rospy.logerr("[probe_action] Failed to move to the probe place holder position")
+            rospy.logerr(
+                "[probe_action] Failed to move to the probe place holder position"
+            )
             return False
 
-        #Moving Down from the probe_place_in_holder_pose down 
-        #probe_holder_pick_for_tucking.x += 0.01
-        #success = self.arm.send_cartesian_pose(probe_holder_pick_for_tucking, max_lin_vel=0.05)
-        #if not success:
+        # Moving Down from the probe_place_in_holder_pose down
+        # probe_holder_pick_for_tucking.x += 0.01
+        # success = self.arm.send_cartesian_pose(probe_holder_pick_for_tucking, max_lin_vel=0.05)
+        # if not success:
         #    rospy.logerr("[probe_action] Failed to move to the probe place holder position")
         #    return False
         # close the gripper
         self.arm.execute_gripper_command(1.0)
-        
+
         # move up a bit
         tucking_probe_holder_pick.z += 0.1
 
-        success = self.arm.send_cartesian_pose(tucking_probe_holder_pick, max_lin_vel=0.05)
+        success = self.arm.send_cartesian_pose(
+            tucking_probe_holder_pick, max_lin_vel=0.05
+        )
 
         if not success:
             rospy.logerr("[probe_action] Failed to move up the probe")
             return False
-        
+
         rospy.loginfo("[probe_action] probe picked")
 
         return True
@@ -251,13 +287,15 @@ class WindCableAction(AbstractAction):
         success = self.arm.send_cartesian_pose(pose_for_tucking_kp)
 
         if not success:
-            rospy.logerr("[probe_action] Failed to move to the probe initial position")
+            rospy.logerr(
+                "[probe_action] Failed to move to the probe initial position"
+            )
             return False
-        
-        rospy.loginfo('[probe_action] reached probe initial position')
+
+        rospy.loginfo("[probe_action] reached probe initial position")
 
         rospy.loginfo("[probe_action] moving away from holder")
-        success = self.arm.move_with_velocity(0.03, 2.0, 'y')
+        success = self.arm.move_with_velocity(0.03, 2.0, "y")
         if not success:
             rospy.logerr("[probe_action] Failed to move away from holder")
             return False
@@ -272,25 +310,32 @@ class WindCableAction(AbstractAction):
         pose_for_tucking_kp.x = current_pose.x
         pose_for_tucking_kp.y = current_pose.y
 
-        success = self.arm.send_cartesian_pose(pose_for_tucking_kp, max_lin_vel=0.01)
+        success = self.arm.send_cartesian_pose(
+            pose_for_tucking_kp, max_lin_vel=0.01
+        )
 
         if not success:
             rospy.logerr("[probe_action] Failed to move down the probe")
             return False
-        
-        rospy.loginfo('[probe_action] moved down the probe')
-        
+
+        rospy.loginfo("[probe_action] moved down the probe")
+
         # move the probe back in x direction for 4cm
-        #success = self.arm.move_with_velocity(-0.025, 3, 'y')
-        
-        #This moves the arm forward with some force for 1.5 cm .. Its 1.5 cm to just touch theprobe not full inserting
-        self.arm.move_down_with_caution(approach_axis='y', time = 8, distance=-0.015, force_threshold=[10,10, 10])
+        # success = self.arm.move_with_velocity(-0.025, 3, 'y')
+
+        # This moves the arm forward with some force for 1.5 cm .. Its 1.5 cm to just touch theprobe not full inserting
+        self.arm.move_down_with_caution(
+            approach_axis="y",
+            time=8,
+            distance=-0.015,
+            force_threshold=[10, 10, 10],
+        )
 
         if not success:
             rospy.logerr("Failed to move back the probe")
             return False
 
-        self.arm.execute_gripper_command(0.6) # open the gripper
+        self.arm.execute_gripper_command(0.6)  # open the gripper
 
         current_pose = self.arm.get_current_pose()
         current_pose.z += 0.04
@@ -299,36 +344,44 @@ class WindCableAction(AbstractAction):
 
         return True
 
-    def run_visual_servoing(self, vs_target_fn, run=True, error_thresholds=[5, 10]):
+    def run_visual_servoing(
+        self, vs_target_fn, run=True, error_thresholds=[5, 10]
+    ):
         stop = False
         while not rospy.is_shutdown():
             if self.image is None:
-                rospy.loginfo('waiting for image')
+                rospy.loginfo("waiting for image")
                 self.loop_rate.sleep()
                 continue
             msg = kortex_driver.msg.TwistCommand()
-            msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+            msg.reference_frame = (
+                kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+            )
             x_error, y_error = vs_target_fn(True)
             if x_error is None:
-                print('none')
+                print("none")
                 msg.twist.linear_x = 0.0
             if y_error is None:
-                print('none')
+                print("none")
                 msg.twist.linear_y = 0.0
             if x_error is not None:
-                rospy.loginfo('X Error: %.2f' % (x_error))
+                rospy.loginfo("X Error: %.2f" % (x_error))
                 if x_error < 0:
                     msg.twist.linear_x = -0.005
                 if x_error > 0:
                     msg.twist.linear_x = 0.005
-                #TODO : Make this separate for both 
-                if abs(x_error) < error_thresholds[0]:     #TODO 40 for picking cable 5 for tcuking alignment 
+                # TODO : Make this separate for both
+                if (
+                    abs(x_error) < error_thresholds[0]
+                ):  # TODO 40 for picking cable 5 for tcuking alignment
                     msg.twist.linear_x = 0.0
-                elif abs(x_error) < error_thresholds[1]: #TODO 50 for picking cable 
+                elif (
+                    abs(x_error) < error_thresholds[1]
+                ):  # TODO 50 for picking cable
                     msg.twist.linear_x *= 0.5
 
             if y_error is not None:
-                rospy.loginfo('Y Error: %.2f' % (y_error))
+                rospy.loginfo("Y Error: %.2f" % (y_error))
                 if y_error < 0:
                     msg.twist.linear_y = -0.005
                 if y_error > 0:
@@ -339,16 +392,21 @@ class WindCableAction(AbstractAction):
                     msg.twist.linear_y *= 0.5
             if run:
                 self.cart_vel_pub.publish(msg)
-                if msg.twist.linear_x == 0.0 and msg.twist.linear_y == 0.0 and x_error is not None:
+                if (
+                    msg.twist.linear_x == 0.0
+                    and msg.twist.linear_y == 0.0
+                    and x_error is not None
+                ):
                     break
             self.loop_rate.sleep()
         msg = kortex_driver.msg.TwistCommand()
-        msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED
+        msg.reference_frame = (
+            kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED
+        )
         self.cart_vel_pub.publish(msg)
         return True
 
     def detect_wind_cable(self, save_image=False):
-
         if save_image:
             self.save_debug_image()
 
@@ -369,10 +427,14 @@ class WindCableAction(AbstractAction):
         y_axis_bottom = 200
 
         # crop the ROI from the image with the rectangle
-        roi = self.image[image_center_y - y_axis_top:image_center_y +
-                            y_axis_bottom, image_center_x - x_axis_left:image_center_x + x_axis_right]
+        roi = self.image[
+            image_center_y - y_axis_top : image_center_y + y_axis_bottom,
+            image_center_x - x_axis_left : image_center_x + x_axis_right,
+        ]
 
-        cv2.rectangle(roi, (0, 0), (roi.shape[1], roi.shape[0]), (255, 255, 255), 20)
+        cv2.rectangle(
+            roi, (0, 0), (roi.shape[1], roi.shape[0]), (255, 255, 255), 20
+        )
 
         roi_copy = roi.copy()
         roi_copy_2 = roi.copy()
@@ -384,8 +446,7 @@ class WindCableAction(AbstractAction):
         # otsu thresholding
         # ret, thresh = cv2.threshold(
         #     blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        ret, blur = cv2.threshold(
-            blur, 100, 255, cv2.THRESH_BINARY)
+        ret, blur = cv2.threshold(blur, 100, 255, cv2.THRESH_BINARY)
         # apply canny edge detection
         canny = cv2.Canny(blur, 50, 150)
         # apply dilation
@@ -393,34 +454,46 @@ class WindCableAction(AbstractAction):
         canny = cv2.dilate(canny, kernel, iterations=1)
         # find the contours
         contours, _ = cv2.findContours(
-            canny, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-        
+            canny, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
+        )
+
         # draw the contours on the image
         cv2.drawContours(roi_copy, contours, -1, (0, 255, 0), 2)
-
 
         # filter out black contours
         filtered_contours = []
         for contour in contours:
-
             # Calculate area and perimeter of the contour
             area = cv2.contourArea(contour)
             perimeter = cv2.arcLength(contour, True)
             # filter out small contours
-            if area < contours_area_threshold_min or area > contours_area_threshold_max:
-                rospy.logwarn("Removing contour with area: %.2f, min:%.2f, max: %.2f" % (area, contours_area_threshold_min, contours_area_threshold_max))
+            if (
+                area < contours_area_threshold_min
+                or area > contours_area_threshold_max
+            ):
+                rospy.logwarn(
+                    "Removing contour with area: %.2f, min:%.2f, max: %.2f"
+                    % (
+                        area,
+                        contours_area_threshold_min,
+                        contours_area_threshold_max,
+                    )
+                )
                 continue
 
             # print("Area: {}".format(area))
 
             # Calculate circularity of the contour
-            circularity = (4 * np.pi * area) / (perimeter ** 2)
+            circularity = (4 * np.pi * area) / (perimeter**2)
 
             # print("Circularity: {}".format(circularity))
 
-            if circularity < circularity_threshold_min or circularity > circularity_threshold_max:
+            if (
+                circularity < circularity_threshold_min
+                or circularity > circularity_threshold_max
+            ):
                 continue
-            
+
             # draw contours on the image
             # cv2.drawContours(roi_copy_2, [contour], -1, (0, 255, 0), 2)
             # cv2.imshow("Contours", roi_copy_2)
@@ -430,16 +503,22 @@ class WindCableAction(AbstractAction):
             filtered_contours.append(contour)
 
         # print("Number of filtered contours: {}".format(len(filtered_contours)))
-        
+
         # draw a horizontal line in the middle of the image
-        horizontal_line = [(0, roi_copy_2.shape[0] // 2),
-                           (roi_copy_2.shape[1], roi_copy_2.shape[0] // 2)]
-        cv2.line(roi_copy_2, horizontal_line[0], horizontal_line[1], (0, 0, 255), 2)
+        horizontal_line = [
+            (0, roi_copy_2.shape[0] // 2),
+            (roi_copy_2.shape[1], roi_copy_2.shape[0] // 2),
+        ]
+        cv2.line(
+            roi_copy_2, horizontal_line[0], horizontal_line[1], (0, 0, 255), 2
+        )
 
         # draw a vertical line in the middle of the image
-        vertical_line = [(roi_copy_2.shape[1] // 2, 0),
-                        (roi_copy_2.shape[1] // 2, roi_copy_2.shape[0])]
-        cv2.line(roi_copy_2, vertical_line[ 0], vertical_line[1], (0, 0, 255), 2)
+        vertical_line = [
+            (roi_copy_2.shape[1] // 2, 0),
+            (roi_copy_2.shape[1] // 2, roi_copy_2.shape[0]),
+        ]
+        cv2.line(roi_copy_2, vertical_line[0], vertical_line[1], (0, 0, 255), 2)
 
         # NOTE: it should only be one contour
         if len(filtered_contours) > 1:
@@ -452,21 +531,38 @@ class WindCableAction(AbstractAction):
             contour_points = filtered_contours[0]
 
             # get the bottom most point of the contour
-            bottom_most_point = contour_points[contour_points[:, :, 1].argmax()][0]
+            bottom_most_point = contour_points[
+                contour_points[:, :, 1].argmax()
+            ][0]
 
             # draw a circle on the bottom most point
             cv2.circle(
-                roi_copy_2, (bottom_most_point[0], bottom_most_point[1]), 5, (0, 0, 255), -1)
+                roi_copy_2,
+                (bottom_most_point[0], bottom_most_point[1]),
+                5,
+                (0, 0, 255),
+                -1,
+            )
 
             error = (roi.shape[1] // 2) - bottom_most_point[0]
             print("Error: {}".format(error))
 
             # print the error on the image
-            cv2.putText(roi_copy_2, "Error: {}".format(error), (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            cv2.putText(
+                roi_copy_2,
+                "Error: {}".format(error),
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (0, 0, 255),
+                2,
+            )
 
             # draw the error line on the image from the centroid to the vertical line
-            error_line = [bottom_most_point, (roi.shape[1] // 2, bottom_most_point[1])]
+            error_line = [
+                bottom_most_point,
+                (roi.shape[1] // 2, bottom_most_point[1]),
+            ]
             cv2.line(roi_copy_2, error_line[0], error_line[1], (255, 0, 0), 2)
 
             # publish the debug image
@@ -477,27 +573,32 @@ class WindCableAction(AbstractAction):
         else:
             print("No contour found!")
             return (None, None)
-    
-    def find_and_save_tucking_pose(self):
 
-        #current_pose = self.arm.get_current_pose()
-        #current_pose.z = 0.11
-        #self.arm.send_cartesian_pose(current_pose)
-        probe_initial_pose_kp = self.transform_utils.transform_pose_frame_name(reference_frame_name="probe_initial_link",
-                                                                      target_frame_name="base_link",
-                                                                      offset_linear=[0.0, 0.00, 0.08],
-                                                                      offset_rotation_euler=[math.pi, 0.0, math.pi/2])
+    def find_and_save_tucking_pose(self):
+        # current_pose = self.arm.get_current_pose()
+        # current_pose.z = 0.11
+        # self.arm.send_cartesian_pose(current_pose)
+        probe_initial_pose_kp = self.transform_utils.transform_pose_frame_name(
+            reference_frame_name="probe_initial_link",
+            target_frame_name="base_link",
+            offset_linear=[0.0, 0.00, 0.08],
+            offset_rotation_euler=[math.pi, 0.0, math.pi / 2],
+        )
 
         # send the probe initial position to the arm
         rospy.loginfo("[probe_action] moving to probe initial position")
         success = self.arm.send_cartesian_pose(probe_initial_pose_kp)
 
         if not success:
-            rospy.logerr("[probe_action] Failed to move to the probe initial position")
+            rospy.logerr(
+                "[probe_action] Failed to move to the probe initial position"
+            )
             return False
 
         # visual servo to find correct location to place probe before picking the probe
-        success = self.run_visual_servoing(self.detect_probe_holder_horizontal, True, error_thresholds = [5, 10])
+        success = self.run_visual_servoing(
+            self.detect_probe_holder_horizontal, True, error_thresholds=[5, 10]
+        )
         pose_for_tucking = self.arm.get_current_pose()
         if pose_for_tucking.theta_z_deg > 0:
             pose_for_tucking.theta_z_deg -= 180.0
@@ -513,7 +614,6 @@ class WindCableAction(AbstractAction):
         self.model.max_det = 1000  # maximum number of detections per image
 
     def detect_probe_holder_horizontal(self, save_image=False):
-
         if save_image:
             self.save_debug_image()
 
@@ -526,39 +626,65 @@ class WindCableAction(AbstractAction):
             if results.pred[0] is not None:  # if there are any detections
                 predictions = results.pred[0]
                 if predictions[:, 4]:
-                    #TODO: add some conditions to avoid wrong detections, eg. like the area of the bounding box
+                    # TODO: add some conditions to avoid wrong detections, eg. like the area of the bounding box
                     boxes = predictions[:, :4]  # x1, y1, x2, y2
 
                     # find the center of the image
                     center = (image_copy.shape[1] / 2, image_copy.shape[0] / 2)
 
                     # draw vertical line at the center of the image
-                    cv2.line(image_copy, (int(center[0]), 0),
-                            (int(center[0]), image_copy.shape[0]), (0, 0, 255), 1)
+                    cv2.line(
+                        image_copy,
+                        (int(center[0]), 0),
+                        (int(center[0]), image_copy.shape[0]),
+                        (0, 0, 255),
+                        1,
+                    )
 
                     # find the center of the bounding box
-                    center_box = (boxes[0][0] + boxes[0][2]) / \
-                        2, (boxes[0][1] + boxes[0][3]) / 2
+                    center_box = (boxes[0][0] + boxes[0][2]) / 2, (
+                        boxes[0][1] + boxes[0][3]
+                    ) / 2
 
                     # show the center of the bounding box on the image
-                    cv2.circle(image_copy, (int(center_box[0]), int(
-                        center_box[1])), 4, (255, 255, 0), 1)
+                    cv2.circle(
+                        image_copy,
+                        (int(center_box[0]), int(center_box[1])),
+                        4,
+                        (255, 255, 0),
+                        1,
+                    )
 
-                    #TODO: Check if the probe can be picked near the tip 
+                    # TODO: Check if the probe can be picked near the tip
                     # find the error in x direction
-                    error_x = center[0] - center_box[0] + 27.0 #magic number for aligning the tip of probe to the center
+                    error_x = (
+                        center[0] - center_box[0] + 27.0
+                    )  # magic number for aligning the tip of probe to the center
 
                     # print the error on the image on the top left corner of the image
-                    cv2.putText(image_copy, "Error: " + str(error_x.numpy()), (10, 30),
-                                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
+                    cv2.putText(
+                        image_copy,
+                        "Error: " + str(error_x.numpy()),
+                        (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1,
+                        (255, 255, 0),
+                        2,
+                    )
 
                     # draw the error line from the center of bounding box to the y axis of the image
-                    cv2.line(image_copy, (int(center_box[0]), int(center_box[1])), (int(
-                        center_box[0] + error_x), int(center_box[1])), (0, 255, 0), 2)
+                    cv2.line(
+                        image_copy,
+                        (int(center_box[0]), int(center_box[1])),
+                        (int(center_box[0] + error_x), int(center_box[1])),
+                        (0, 255, 0),
+                        2,
+                    )
 
                     # publish the debug image
                     self.img_pub.publish(
-                        self.bridge.cv2_to_imgmsg(image_copy, "bgr8"))
+                        self.bridge.cv2_to_imgmsg(image_copy, "bgr8")
+                    )
 
                 return error_x.numpy(), None  # error in x direction
             else:
@@ -567,9 +693,8 @@ class WindCableAction(AbstractAction):
         except:
             print("No predictions")
             return None, None
-        
+
     def save_debug_image(self):
-       
         # get the current date and time
         now = datetime.datetime.now()
 
@@ -578,5 +703,10 @@ class WindCableAction(AbstractAction):
             os.makedirs(self.save_debug_image_dir)
 
         if self.image is not None:
-            cv2.imwrite(os.path.join(
-                self.save_debug_image_dir, 'WindCable_debug_image_{}.png'.format(now)), self.image)
+            cv2.imwrite(
+                os.path.join(
+                    self.save_debug_image_dir,
+                    "WindCable_debug_image_{}.png".format(now),
+                ),
+                self.image,
+            )

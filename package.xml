@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package>
-  <name>robothon2023</name>
+  <name>kinova_apps</name>
   <version>0.1.0</version>
   <description>Code for solving the Robothon 2023 tasks</description>
   <maintainer email="b-it-bots@inf.-brs.de">b-it-bots</maintainer>

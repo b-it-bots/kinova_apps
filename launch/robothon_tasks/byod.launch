@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+
+<launch>
+    <!-- Robot namespace -->
+    <arg name="robot_name" default="my_gen3" />
+
+    <node pkg="kinova_apps" type="byod_test.py" name="byod_task" output="screen">
+        <rosparam command="load" file="$(find kinova_apps)/config/byod_poses.yaml" />
+        <rosparam command="load" file="$(find kinova_apps)/config/joint_angles.yaml" />
+    </node>
+</launch>

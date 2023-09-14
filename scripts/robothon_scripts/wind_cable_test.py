@@ -2,12 +2,13 @@
 from __future__ import print_function
 
 import rospy
-from robothon2023.full_arm_movement import FullArmMovement
-from robothon2023.transform_utils import TransformUtils
+from kinova_apps.full_arm_movement import FullArmMovement
+from kinova_apps.transform_utils import TransformUtils
 from kortex_driver.srv import *
 from kortex_driver.msg import *
 
-from robothon2023.wind_cable_action import WindCableAction
+from kinova_apps.wind_cable_action import WindCableAction
+
 
 class WindCable(object):
 
@@ -28,7 +29,7 @@ class WindCable(object):
         self.fam.clear_faults()
         self.fam.subscribe_to_a_robot_notification()
         self.fam.send_joint_angles(self.joint_angles["perceive_table"])
-        self.fam.execute_gripper_command(0.35) #Open the gripper
+        self.fam.execute_gripper_command(0.35)  # Open the gripper
 
     def test(self):
         if self.wind_cable.do():
@@ -36,6 +37,6 @@ class WindCable(object):
 
 
 if __name__ == "__main__":
-    rospy.init_node('probe_test')
-    WC =  WindCable()
+    rospy.init_node("probe_test")
+    WC = WindCable()
     WC.test()

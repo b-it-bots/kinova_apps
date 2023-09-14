@@ -46,7 +46,7 @@ The main intention behind creating a GUI is to easily debug various tasks by ver
 ### Running the GUI
 
 ```bash
-roslaunch robothon2023 gui_kinova.launch
+roslaunch kinova_apps gui_kinova.launch
 ```
 
 ### Adding new pose lists

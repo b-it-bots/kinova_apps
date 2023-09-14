@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+
+<launch>
+    <param name="/board_height" type="double" value="0.1157" />
+    <node pkg="kinova_apps" type="task_sm.py" name="task_sm" output="screen">
+        <rosparam command="load" file="$(find kinova_apps)/config/boundary_safety.yaml" />
+        <rosparam command="load" file="$(find kinova_apps)/config/task_params.yaml" />
+        <rosparam command="load" file="$(find kinova_apps)/config/trajectories.yaml" />
+        <rosparam command="load" file="$(find kinova_apps)/config/winding_poses_new.yaml" />
+        <rosparam command="load" file="$(find kinova_apps)/config/joint_angles.yaml" />
+        <rosparam command="load" file="$(find kinova_apps)/config/probe_action.yaml" />
+        <rosparam command="load" file="$(find kinova_apps)/config/door_open_trajectories.yaml" />
+        <rosparam command="load" file="$(find kinova_apps)/config/byod_poses.yaml" />
+        <remap from="~board_detector_event_out" to="/task_board_detector/event_out" />
+        <remap from="~board_detector_event_in" to="/task_board_detector/event_in" />
+        <remap from="~poi_event_in" to="/points_of_interest_publisher/event_in" />
+        <remap from="~init_approximate_board_pose" to="/task_board_detector/approximate_board_pose" />
+    </node>
+    <include file="$(find kinova_apps)/launch/task_board_detector.launch" />
+</launch>
