@@ -1,0 +1,9 @@
+# 0: perceive
+# 1: clear clutter
+# 2: pick
+# 3: place
+task_order: [0, 1, 2]
+
+debug: true
+linear_vel_z: 0.01 # positive going up, negative going down; NOTE: changing this affects force_z_diff_threshold. Low velocities are more stable
+force_z_diff_threshold: 3.0 # if diff between current force and mean force is greater, stop

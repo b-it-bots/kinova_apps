@@ -1,0 +1,12 @@
+<!-- launch file to load all the config files for the app -->
+
+<launch>
+   
+    <!-- load the yaml files -->
+    <rosparam command="load" file="$(find kinova_apps)/config/joint_angles.yaml" />
+    <rosparam command="load" file="$(find kinova_apps)/config/boundary_safety.yaml" />
+    <rosparam command="load" file="$(find kinova_apps)/config/task_params.yaml" />
+    <rosparam command="load" file="$(find kinova_apps)/config/fixed_transforms.yaml" />
+    <rosparam command="load" file="$(find kinova_apps)/config/perception_params.yaml" />
+    
+</launch>

@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+
+<launch>
+    <!-- Robot namespace -->
+    <arg name="robot_name" default="my_gen3" />
+    <!-- <arg name="pose_input" default="/pcl_closest_obj/output_pose"/>
+    <arg name="start_delay_seconds" default="0"/> -->
+
+    <!-- Launch the example in that namespace -->
+    <!-- node name="full_arm_movement_python" pkg="kinova_apps" type="full_arm_movement.py"
+    output="screen" launch-prefix="bash -c 'sleep $(arg start_delay_seconds); $0 $@' ">
+        <param name="robot_name" value="$(arg robot_name)"/>
+    </node -->
+
+    <node pkg="kinova_apps" type="visual_servoing_kinova.py" name="visual_servoing_kinova"
+        output="screen">
+        <!-- <rosparam command="load" file="$(find kinova_apps)/config/joint_angles.yaml"/>
+        <rosparam command="load" file="$(find kinova_apps)/config/boundary_safety.yaml"/>
+        <rosparam command="load" file="$(find kinova_apps)/config/task_params.yaml"/>
+        <rosparam command="load" file="$(find kinova_apps)/config/trajectories.yaml"/>
+        <remap from="~pose_in" to="$(arg pose_input)" /> -->
+    </node>
+</launch>
