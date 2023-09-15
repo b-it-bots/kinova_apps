@@ -2,11 +2,14 @@
 
 <launch>
     <!-- argument: app name -->
-    <arg name="app_name" default="clutter_pick" />
+    <arg name="app_name" default="gui_kinova" />
 
-    <!-- load the launch file from app_name folder -->
-    <include file="$(find kinova_apps)/launch/$(arg app_name)/load_config.launch" />
+    <include file="$(find kinova_apps)/launch/load_default_config.launch" >
+        <arg name="app_name" value="$(arg app_name)" />
+    </include>
 
-    <node pkg="kinova_apps" type="gui_kinova.py" name="gui_kinova" output="screen" />
+    <group ns="$(arg app_name)">
+        <node pkg="kinova_apps" type="gui_kinova.py" name="gui_kinova_node" output="screen" />
+    </group>
 
 </launch>

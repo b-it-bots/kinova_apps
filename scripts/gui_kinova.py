@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-This module contains a qui component for moving kinova arm
+This module contains a gui component for moving kinova arm
 
 """
 # -*- encoding: utf-8 -*-
@@ -17,7 +17,7 @@ import rospy
 from typing import List, Tuple, Any, Optional
 
 from kinova_apps.full_arm_movement import FullArmMovement
-from kinova_apps.transform_utils import TransformUtils
+from utils.transform_utils import TransformUtils
 
 from utils.kinova_pose import (
     get_kinovapose_from_list,
@@ -179,18 +179,20 @@ class ListWindow(tk.Frame):
             self.callback(self.items.get_item_by_name(selected_item_name))
 
 
-class RobothonTask(object):
-
-    """pick and place code using full arm movement and 3d segmentation perception"""
+class GuiKinova(object):
+    """
+    A class that represents a gui component for interacting with kinova arm.
+    """
 
     def __init__(self):
-        self.joint_angles = rospy.get_param("~joint_angles", None)
-        self.probe_action_poses = rospy.get_param("~probe_action_poses", None)
-        self.wind_cable_poses = rospy.get_param("~wind_poses", None)
-        self.byod_poses = rospy.get_param("~byod_poses", None)
-        self.fixed_transforms = rospy.get_param("~fixed_transforms")
+        # get parameter with namespaced
+        self.joint_angles = rospy.get_param("joint_angles", None)
+        # self.probe_action_poses = rospy.get_param("~probe_action_poses", None)
+        # self.wind_cable_poses = rospy.get_param("~wind_poses", None)
+        # self.byod_poses = rospy.get_param("~byod_poses", None)
+        # self.fixed_transforms = rospy.get_param("~fixed_transforms")
 
-        self.lists = [self.joint_angles, self.wind_cable_poses, self.byod_poses]
+        self.lists = [self.joint_angles]
 
         self.arm = FullArmMovement()
         self.transform_utils = TransformUtils()
@@ -209,69 +211,6 @@ class RobothonTask(object):
         # keep 3 lists in a frame
         frame = ttk.Frame(noetbook)
 
-        # # trajectories
-        # trajectories = [(trajectory, self.trajectories[trajectory]) for trajectory in self.trajectories.keys()]
-
-        # trajectories_list = ItemList()
-        # trajectories_list.add_items(trajectories)
-
-        # trajectories_window = ListWindow(frame, 'trajectories', trajectories_list, self.trajectories_cb)
-        # trajectories_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        # fixed transforms
-        fixed_transform_link_names = [
-            (link_name.replace("board_to_", "") + "_link", "")
-            for link_name in self.fixed_transforms
-        ]
-
-        fixed_transforms_list = ItemList()
-        fixed_transforms_list.add_items(fixed_transform_link_names)
-
-        fixed_transforms_window = ListWindow(
-            frame,
-            "fixed transforms",
-            fixed_transforms_list,
-            self.fixed_transforms_cb,
-        )
-        fixed_transforms_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        # wind cable poses
-        wind_cable_poses = [
-            (pose, self.wind_cable_poses[pose])
-            for pose in self.wind_cable_poses
-        ]
-
-        wind_cable_poses_list = ItemList()
-        wind_cable_poses_list.add_items(wind_cable_poses)
-
-        wind_cable_poses_window = ListWindow(
-            frame,
-            "winding poses",
-            wind_cable_poses_list,
-            self.wind_cable_poses_cb,
-        )
-        wind_cable_poses_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        # probe action poses
-        probe_action_poses = [
-            (pose, get_kinovapose_from_list(self.probe_action_poses[pose]))
-            for pose in self.probe_action_poses.keys()
-        ]
-
-        probe_action_poses_list = ItemList()
-        probe_action_poses_list.add_items(probe_action_poses)
-
-        probe_action_poses_window = ListWindow(
-            frame,
-            "probe action poses",
-            probe_action_poses_list,
-            self.probe_action_poses_cb,
-        )
-        probe_action_poses_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        # second frame
-        frame2 = ttk.Frame(noetbook)
-
         # joint angles
         joint_angles = [
             (joint_angle, self.joint_angles[joint_angle])
@@ -282,22 +221,85 @@ class RobothonTask(object):
         joint_anlges_list.add_items(joint_angles)
 
         joint_angles_window = ListWindow(
-            frame2, "joint angles", joint_anlges_list, self.joint_angles_cb
+            frame, "joint angles", joint_anlges_list, self.joint_angles_cb
         )
         joint_angles_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
+        # # trajectories
+        # trajectories = [(trajectory, self.trajectories[trajectory]) for trajectory in self.trajectories.keys()]
+
+        # trajectories_list = ItemList()
+        # trajectories_list.add_items(trajectories)
+
+        # trajectories_window = ListWindow(frame, 'trajectories', trajectories_list, self.trajectories_cb)
+        # trajectories_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # fixed transforms
+        # fixed_transform_link_names = [
+        #     (link_name.replace("board_to_", "") + "_link", "")
+        #     for link_name in self.fixed_transforms
+        # ]
+
+        # fixed_transforms_list = ItemList()
+        # fixed_transforms_list.add_items(fixed_transform_link_names)
+
+        # fixed_transforms_window = ListWindow(
+        #     frame,
+        #     "fixed transforms",
+        #     fixed_transforms_list,
+        #     self.fixed_transforms_cb,
+        # )
+        # fixed_transforms_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # wind cable poses
+        # wind_cable_poses = [
+        #     (pose, self.wind_cable_poses[pose])
+        #     for pose in self.wind_cable_poses
+        # ]
+
+        # wind_cable_poses_list = ItemList()
+        # wind_cable_poses_list.add_items(wind_cable_poses)
+
+        # wind_cable_poses_window = ListWindow(
+        #     frame,
+        #     "winding poses",
+        #     wind_cable_poses_list,
+        #     self.wind_cable_poses_cb,
+        # )
+        # wind_cable_poses_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # probe action poses
+        # probe_action_poses = [
+        #     (pose, get_kinovapose_from_list(self.probe_action_poses[pose]))
+        #     for pose in self.probe_action_poses.keys()
+        # ]
+
+        # probe_action_poses_list = ItemList()
+        # probe_action_poses_list.add_items(probe_action_poses)
+
+        # probe_action_poses_window = ListWindow(
+        #     frame,
+        #     "probe action poses",
+        #     probe_action_poses_list,
+        #     self.probe_action_poses_cb,
+        # )
+        # probe_action_poses_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # second frame
+        frame2 = ttk.Frame(noetbook)
+
         # byod poses
-        byod_poses = []
-        for key, i in zip(self.byod_poses.keys(), self.byod_poses.values()):
-            byod_poses.append((key, get_kinovapose_from_list(list(i.values()))))
+        # byod_poses = []
+        # for key, i in zip(self.byod_poses.keys(), self.byod_poses.values()):
+        #     byod_poses.append((key, get_kinovapose_from_list(list(i.values()))))
 
-        byod_poses_list = ItemList()
-        byod_poses_list.add_items(byod_poses)
+        # byod_poses_list = ItemList()
+        # byod_poses_list.add_items(byod_poses)
 
-        byod_poses_window = ListWindow(
-            frame2, "byod poses", byod_poses_list, self.byod_poses_cb
-        )
-        byod_poses_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # byod_poses_window = ListWindow(
+        #     frame2, "byod poses", byod_poses_list, self.byod_poses_cb
+        # )
+        # byod_poses_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         # add frames to notebook
         noetbook.add(frame, text="frame1")
@@ -750,8 +752,8 @@ class RobothonTask(object):
 
 
 if __name__ == "__main__":
-    rospy.init_node("robothon_task")
-    task = RobothonTask()
+    rospy.init_node("gui_kinova_node")
+    task = GuiKinova()
     rospy.on_shutdown(task.on_shutdown)
     try:
         task.create_window()

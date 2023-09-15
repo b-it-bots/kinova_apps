@@ -3,16 +3,23 @@
 <launch>
     <!-- Robot namespace -->
     <arg name="robot_name" default="my_gen3" />
+    <!-- app name -->
+    <arg name="app_name" default="clutter_pick" />
     <!-- <arg name="pose_input" default="/pcl_closest_obj/output_pose" /> -->
     <arg name="start_delay_seconds" default="0" />
 
-    <node pkg="kinova_apps" type="pick_action_test.py" name="pick_test" output="screen">
-        <rosparam command="load" file="$(find kinova_apps)/config/joint_angles.yaml" />
-        <!-- <rosparam command="load" file="$(find kinova_apps)/config/boundary_safety.yaml" />
-        <rosparam command="load" file="$(find kinova_apps)/config/task_params.yaml" />
-        <rosparam command="load" file="$(find kinova_apps)/config/trajectories.yaml" />
-        <rosparam command="load" file="$(find kinova_apps)/config/door_open_trajectories.yaml" />
-        <rosparam command="load" file="$(find kinova_apps)/config/probe_action.yaml" />
-        <remap from="~pose_in" to="$(arg pose_input)" /> -->
-    </node>
+    <!-- launch load_config -->
+    <include file="$(find kinova_bringup)/launch/load_config.launch" >
+        <arg name="app_name" value="$(arg app_name)" />
+    </include>
+
+    <!-- launch gui -->
+    <include file="$(find kinova_apps)/launch/gui_kinova.launch" >
+        <arg name="app_name" value="$(arg app_name)" />
+    </include>
+
+    <!-- launch node with namespace -->
+    <group ns="$(arg app_name)">
+        <node pkg="kinova_apps" type="pick_action_test.py" name="pick_test" output="screen" />
+    </group>
 </launch>

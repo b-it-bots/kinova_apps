@@ -2,6 +2,8 @@
 
 import rospy
 
+from sensor_msgs.msg import Image
+
 import kortex_driver.msg
 
 from kinova_apps.abstract_action import AbstractAction
@@ -9,7 +11,7 @@ from kinova_apps.full_arm_movement import FullArmMovement
 from utils.transform_utils import TransformUtils
 
 
-class PickAction(AbstractAction):
+class ClearClutterAction(AbstractAction):
     def __init__(
         self,
         arm: FullArmMovement,
@@ -24,6 +26,9 @@ class PickAction(AbstractAction):
             "/my_gen3/in/cartesian_velocity", kortex_driver.msg.TwistCommand, queue_size=1
         )
 
+        self.rgb_topic = 'input_image_topic'
+        self.depth_topic = 'input_pc_topic'
+
     def pre_perceive(self) -> bool:
         success = True
         # open gripper before picking
@@ -33,17 +38,12 @@ class PickAction(AbstractAction):
 
     def act(self) -> bool:
         success = True
-        # get the current pose of the end effector
-        current_pose = self.arm.get_current_pose()
+        
+        # subscribe to rgb 
+        self.rgb_image = rospy.wait_for_message(self.rgb_topic, Image, timeout=10)
 
-        # create a new pose with 10cm away in x direction
-        new_pose = current_pose
-        new_pose.x += 0.1
-
-        # move to the new pose
-        success &= self.arm.send_cartesian_pose(new_pose)
-
-        success &= self.arm.execute_gripper_command(0.0)
+        # print image properties
+        print("image width: ", self.rgb_image.width)
 
         return success
 
@@ -51,3 +51,7 @@ class PickAction(AbstractAction):
         print("in verify")
         return True
     
+    def rgb_callback(self, msg):
+        print("in rgb_callback")
+        # unsubscribe from rgb
+        self.rgb_sub.unregister()

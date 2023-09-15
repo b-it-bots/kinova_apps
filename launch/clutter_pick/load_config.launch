@@ -1,12 +1,16 @@
 <!-- launch file to load all the config files for the app -->
 
 <launch>
-   
-    <!-- load the yaml files -->
-    <rosparam command="load" file="$(find kinova_apps)/config/joint_angles.yaml" />
-    <rosparam command="load" file="$(find kinova_apps)/config/boundary_safety.yaml" />
-    <rosparam command="load" file="$(find kinova_apps)/config/task_params.yaml" />
-    <rosparam command="load" file="$(find kinova_apps)/config/fixed_transforms.yaml" />
-    <rosparam command="load" file="$(find kinova_apps)/config/perception_params.yaml" />
+    <!-- get the app_name argument -->
+    <arg name="app_name" default="clutter_pick" />
+
+    <group ns="$(arg app_name)">
+        <!-- load the yaml files -->
+        <rosparam command="load" file="$(find kinova_apps)/config/$(arg app_name)/joint_angles.yaml" />
+        <rosparam command="load" file="$(find kinova_apps)/config/$(arg app_name)/boundary_safety.yaml" />
+        <rosparam command="load" file="$(find kinova_apps)/config/$(arg app_name)/task_params.yaml" />
+        <rosparam command="load" file="$(find kinova_apps)/config/$(arg app_name)/fixed_transforms.yaml" />
+        <rosparam command="load" file="$(find kinova_apps)/config/$(arg app_name)/perception_params.yaml" />
+    </group>
     
 </launch>
