@@ -4,9 +4,11 @@
     <!-- argument: app name -->
     <arg name="app_name" default="gui_kinova" />
 
-    <include file="$(find kinova_apps)/launch/load_default_config.launch" >
-        <arg name="app_name" value="$(arg app_name)" />
-    </include>
+    <group if="$(eval app_name == 'gui_kinova')">
+        <include file="$(find kinova_apps)/launch/load_default_config.launch" >
+            <arg name="app_name" value="$(arg app_name)" />
+        </include>
+    </group>
 
     <group ns="$(arg app_name)">
         <node pkg="kinova_apps" type="gui_kinova.py" name="gui_kinova_node" output="screen" />
