@@ -1,0 +1,15 @@
+clutter:
+  hsv_ranges:
+    red:
+      lower: [150, 80, 0]
+      upper: [179, 255, 255]
+    green:
+      lower: [40, 170, 0]
+      upper: [90, 255, 255]
+    blue:
+      lower: [100, 170, 100]
+      upper: [130, 255, 255]
+    yellow:
+      lower: [22, 93, 0]
+      upper: [45, 255, 255]
+  min_clearance: 100 # pixels

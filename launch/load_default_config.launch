@@ -1,0 +1,12 @@
+<!-- launch file to load all the config files for the app -->
+
+<launch>
+    <!-- get the app_name argument -->
+    <arg name="app_name" />
+
+    <group ns="$(arg app_name)">
+        <!-- load the yaml files -->
+        <rosparam command="load" file="$(find kinova_apps)/config/default_config.yaml" />
+    </group>
+    
+</launch>

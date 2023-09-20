@@ -20,6 +20,10 @@ class PickAction(AbstractAction):
 
         self.reference_frame = reference_frame
 
+        self.cartesian_velocity_pub = rospy.Publisher(
+            "/my_gen3/in/cartesian_velocity", kortex_driver.msg.TwistCommand, queue_size=1
+        )
+
     def pre_perceive(self) -> bool:
         success = True
         # open gripper before picking

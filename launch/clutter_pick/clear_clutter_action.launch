@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+
+<launch>
+    <!-- Robot namespace -->
+    <arg name="robot_name" default="my_gen3" />
+    <!-- app name -->
+    <arg name="app_name" default="clutter_pick" />
+    <!-- start delay -->
+    <arg name="start_delay_seconds" default="0" />
+    <!-- gui flag -->
+    <arg name="gui" default="false" />
+
+    <!-- launch load_config -->
+    <include file="$(find kinova_apps)/launch/$(arg app_name)/load_config.launch">
+        <arg name="app_name" value="$(arg app_name)" />
+    </include>
+
+    <!-- launch gui if gui flag is true -->
+    <group if="$(eval gui == 'true')">
+        <include file="$(find kinova_apps)/launch/gui_kinova.launch">
+            <arg name="app_name" value="$(arg app_name)" />
+        </include>
+    </group>
+
+    <!-- launch node with namespace -->
+    <group ns="$(arg app_name)">
+        <node pkg="kinova_apps" type="clear_clutter_action_test.py" name="clear_clutter_test"
+            output="screen">
+            <remap from="input_pointcloud_topic" to="/camera/depth_registered/points" />
+            <remap from="input_image_topic" to="/camera/color/image_raw" />
+            <remap from="camera_info_topic" to="/camera/color/camera_info" />
+        </node>
+    </group>
+</launch>
