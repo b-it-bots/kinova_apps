@@ -457,7 +457,7 @@ class FullArmMovement:
         Controls the gripper of the robot.
 
             Parameters:
-                value (float): 0.0 is fully closed and 1.0 is fully open.
+                value (float): 0.0 is fully open and 1.0 is fully closed.
 
             Returns:
                 bool: True if the gripper command was successfully sent, False

@@ -1,70 +1,83 @@
 #!/usr/bin/env python3
 
-# All utilities related to transform we are collecting here to be reused 
+# All utilities related to transform we are collecting here to be reused
 # by the different actions
 
 from __future__ import print_function
+import math
 import tf
-import  math
+import tf2_ros
 
 from typing import List
 import rospy
+from tf2_sensor_msgs.tf2_sensor_msgs import do_transform_cloud
 
 from geometry_msgs.msg import PoseStamped, Quaternion
 from typing import Union
-import rospy
 from utils.kinova_pose import KinovaPose, get_kinovapose_from_pose_stamped
+
 
 class TransformUtils(object):
 
     """Transform Utils convert tf in different frames and also doiong retries"""
 
     def __init__(self):
-
         self.listener = tf.TransformListener()
         # how long to wait for transform (in seconds)
         self.wait_for_transform = 0.1
 
         self.transform_tries = 5
 
-    def transform_pose_frame_name(self,
-                                  reference_frame_name: str,
-                                  target_frame_name: str,
-                                  retries: int=5,
-                                  offset_linear: List[float]=[0., 0., 0.],
-                                  offset_rotation_euler: List[float]=[0., 0., 0.]
-                                ) -> Union[KinovaPose, None]:
-        """ Transform pose with string names and any offset if provided
-        """
-        ## Getting Pose of the board_link in the base_link 
+        self.tf2_buffer = tf2_ros.Buffer()
+        self.tf2_listener = tf2_ros.TransformListener(self.tf2_buffer)
+
+    def transform_pose_frame_name(
+        self,
+        reference_frame_name: str,
+        target_frame_name: str,
+        retries: int = 5,
+        offset_linear: List[float] = [0.0, 0.0, 0.0],
+        offset_rotation_euler: List[float] = [0.0, 0.0, 0.0],
+    ) -> Union[KinovaPose, None]:
+        """Transform pose with string names and any offset if provided"""
+        ## Getting Pose of the board_link in the base_link
         msg = PoseStamped()
-        msg.header.frame_id = reference_frame_name #board link is the name of tf
-        #msg.header.stamp = rospy.Time.now()
+        msg.header.frame_id = (
+            reference_frame_name  # board link is the name of tf
+        )
+        # msg.header.stamp = rospy.Time.now()
 
         # rospy.Time(0) returns the latest available data for a specific transform,
         # instead of the data at a specific point in time.
         msg.header.stamp = rospy.Time(0)
-        #make the z axis (blux in rviz) face below  by rotating around x axis
-        q = list(tf.transformations.quaternion_from_euler(offset_rotation_euler[0],
-                                                          offset_rotation_euler[1],
-                                                          offset_rotation_euler[2]))
+        # make the z axis (blux in rviz) face below  by rotating around x axis
+        q = list(
+            tf.transformations.quaternion_from_euler(
+                offset_rotation_euler[0],
+                offset_rotation_euler[1],
+                offset_rotation_euler[2],
+            )
+        )
         msg.pose.orientation = Quaternion(*q)
         msg.pose.position.x += offset_linear[0]
         msg.pose.position.y += offset_linear[1]
         msg.pose.position.z += offset_linear[2]
         # either because of a camera calibration offset or something to do with the reference frame for sending Cartesian poses
-#        msg.pose.position.x += 0.01
+        #        msg.pose.position.x += 0.01
         # Creating a zero pose of the baord link and trasnforming it with respect to base link
         msg = self.transformed_pose_with_retries(msg, target_frame_name)
         kinova_pose = get_kinovapose_from_pose_stamped(msg)
         return kinova_pose
 
-    def transformed_pose_with_retries(self, reference_pose: PoseStamped, 
-                                      target_frame: str,
-                                      retries  : int = 5,
-                                      execute_arm: bool = False,
-                                      offset: List[float] = [0., 0., 0.]) -> Union[PoseStamped, None]:
-        """ Transform pose with multiple retries
+    def transformed_pose_with_retries(
+        self,
+        reference_pose: PoseStamped,
+        target_frame: str,
+        retries: int = 5,
+        execute_arm: bool = False,
+        offset: List[float] = [0.0, 0.0, 0.0],
+    ) -> Union[PoseStamped, None]:
+        """Transform pose with multiple retries
 
         input reference_pose: The reference pose.
         input target_frame: The name of the taget frame.
@@ -81,22 +94,27 @@ class TransformUtils(object):
             transformed_pose = self.transform_pose(reference_pose, target_frame)
             if transformed_pose:
                 break
-        
+
         if execute_arm:
             # rotate around z axis by 90 degrees
             euler = tf.transformations.euler_from_quaternion(
-                [transformed_pose.pose.orientation.x,
-                transformed_pose.pose.orientation.y,
-                transformed_pose.pose.orientation.z,
-                transformed_pose.pose.orientation.w]
+                [
+                    transformed_pose.pose.orientation.x,
+                    transformed_pose.pose.orientation.y,
+                    transformed_pose.pose.orientation.z,
+                    transformed_pose.pose.orientation.w,
+                ]
             )
-            q = tf.transformations.quaternion_from_euler(math.pi + offset[0], offset[1]+euler[1], euler[2] + offset[2])
+            q = tf.transformations.quaternion_from_euler(
+                math.pi + offset[0], offset[1] + euler[1], euler[2] + offset[2]
+            )
             transformed_pose.pose.orientation = Quaternion(*q)
 
         return transformed_pose
 
-    def transform_pose(self, reference_pose: PoseStamped, 
-                       target_frame: str) -> Union[PoseStamped, None]:
+    def transform_pose(
+        self, reference_pose: PoseStamped, target_frame: str
+    ) -> Union[PoseStamped, None]:
         """
         Transforms a given pose into the target frame.
 
@@ -116,13 +134,16 @@ class TransformUtils(object):
             )
 
             self.listener.waitForTransform(
-                target_frame, reference_pose.header.frame_id,
-                common_time, rospy.Duration(self.wait_for_transform)
+                target_frame,
+                reference_pose.header.frame_id,
+                common_time,
+                rospy.Duration(self.wait_for_transform),
             )
             reference_pose.header.stamp = common_time
 
             transformed_pose = self.listener.transformPose(
-                target_frame, reference_pose,
+                target_frame,
+                reference_pose,
             )
 
             return transformed_pose
@@ -130,22 +151,26 @@ class TransformUtils(object):
         except tf.Exception as error:
             rospy.logwarn("Exception occurred: {0}".format(error))
             return None
-        
+
     def get_pose_from_link(self, target_link: str, source_link: str):
-        '''
+        """
         input: target_link: the link to get the pose in
                 source_link: the link to get the pose of
         output: PoseStamped\n
         returns the pose of the link in the target link frame
-        '''
+        """
 
         listener = tf.TransformListener()
 
         # Wait for the transform to become available
-        listener.waitForTransform(source_link, target_link, rospy.Time(), rospy.Duration(1.0))
+        listener.waitForTransform(
+            source_link, target_link, rospy.Time(), rospy.Duration(1.0)
+        )
 
         # Get the pose of the base_link with respect to the map
-        (trans, rot) = listener.lookupTransform(target_link, source_link, rospy.Time(0))
+        (trans, rot) = listener.lookupTransform(
+            target_link, source_link, rospy.Time(0)
+        )
 
         # Convert the translation and rotation to a PoseStamped message
         pose_msg = PoseStamped()
@@ -160,9 +185,9 @@ class TransformUtils(object):
         pose_msg.pose.orientation.w = rot[3]
 
         return pose_msg
-    
+
     def get_transformed_pose(self, reference_pose, target_frame):
-        """ Transform pose with multiple retries
+        """Transform pose with multiple retries
 
         :return: The updated state.
         :rtype: str
@@ -174,3 +199,24 @@ class TransformUtils(object):
                 return transformed_pose
         transformed_pose = None
         return transformed_pose
+
+    def transform_point_cloud(self, reference_frame, target_frame, pc):
+        """Transform point_cloud2
+
+        :return: transformed point cloud in target frame
+        """
+
+        # transform point cloud to base_link frame
+        try:
+            trans = self.tf2_buffer.lookup_transform(
+                target_frame,
+                pc.header.frame_id,
+                rospy.Time(0),
+                rospy.Duration(self.wait_for_transform),
+            )
+
+        except Exception as error:
+            rospy.logwarn("Exception occurred: {0}".format(error))
+            return None
+
+        return do_transform_cloud(pc, trans)
