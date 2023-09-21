@@ -15,16 +15,7 @@ class YoloDetector:
 
         predicted_boxes = results[0].boxes.xyxy.cpu().numpy().astype(int)
 
-        four_coordinates = []
-
-        for object in predicted_boxes:
-             x1 = object[0]
-             y1 = object[1]
-             x2 = object[2]
-             y2 = object[3]
-             four_coordinates.append([(x1,y1), (x2,y1), (x1,y2), (x2,y2)])
-        
-        return four_coordinates
+        return predicted_boxes
     
 
 
