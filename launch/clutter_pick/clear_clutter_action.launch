@@ -16,11 +16,16 @@
     </include>
 
     <!-- launch gui if gui flag is true -->
-    <group if="$(eval gui == 'true')">
+    <group if="$(eval gui)">
         <include file="$(find kinova_apps)/launch/gui_kinova.launch">
             <arg name="app_name" value="$(arg app_name)" />
         </include>
     </group>
+
+    <!-- arg for model path -->
+    <arg name="model_path" default="$(find kinova_apps)/models/$(arg app_name)/" />
+    <!-- arg for model name -->
+    <arg name="model_name" default="best.pt" />
 
     <!-- launch node with namespace -->
     <group ns="$(arg app_name)">
@@ -29,6 +34,8 @@
             <remap from="input_pointcloud_topic" to="/camera/depth_registered/points" />
             <remap from="input_image_topic" to="/camera/color/image_raw" />
             <remap from="camera_info_topic" to="/camera/color/camera_info" />
+            <param name="model_path" value="$(arg model_path)" />
+            <param name="model_name" value="$(arg model_name)" />
         </node>
     </group>
 </launch>

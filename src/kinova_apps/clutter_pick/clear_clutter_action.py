@@ -30,6 +30,8 @@ from kinova_apps.full_arm_movement import FullArmMovement
 from utils.transform_utils import TransformUtils
 from utils.kinova_pose import KinovaPose, get_kinovapose_from_pose_stamped
 
+from kinova_apps.clutter_pick.object_detction import YoloDetector
+
 
 class ClearClutterAction(AbstractAction):
     def __init__(
@@ -37,7 +39,7 @@ class ClearClutterAction(AbstractAction):
         arm: FullArmMovement,
         transform_utils: TransformUtils,
         reference_frame: str = "base_link",
-        debug: bool = False,
+        debug: bool = True,
     ) -> None:
         super().__init__(arm, transform_utils)
 
@@ -47,8 +49,11 @@ class ClearClutterAction(AbstractAction):
             "/my_gen3/in/cartesian_velocity", kortex_driver.msg.TwistCommand, queue_size=1
         )
 
+        # publisher for debug image
+        self.debug_image_pub = rospy.Publisher("/debug_image", Image, queue_size=10)
+
         # publisher for transform point cloud
-        self.pc_pub = rospy.Publisher("/transformed_point_cloud", PointCloud2, queue_size=10)
+        self.pc_pub = rospy.Publisher("/pc_rois", PointCloud2, queue_size=10)
 
         # publisher for pose array
         self.pose_array_pub = rospy.Publisher("/pose_array", PoseArray, queue_size=10)
@@ -62,6 +67,14 @@ class ClearClutterAction(AbstractAction):
 
         self.rgb_image = None
         self.pc = None
+
+        # get model path from launch file
+        model_path = rospy.get_param("model_path")
+        model_name = rospy.get_param("model_name")
+
+        model = model_path + model_name
+
+        self.yolo_detector = YoloDetector(model)
 
     def pre_perceive(self) -> bool:
         success = True
@@ -94,14 +107,19 @@ class ClearClutterAction(AbstractAction):
         while self.rgb_image is None:
             rospy.sleep(0.1)
 
-        has_clutter, polygons, clutter_polys = self.process_image_with_cubes(self.rgb_image)
+        # has_clutter, polygons, clutter_polys = self.process_image_with_cubes(self.rgb_image)
 
-        if has_clutter:
-            pass
+        # if has_clutter:
+        #     pass
         #     self.attack_clutter(polygons)
         #    # go to perceive table pose
         #     re-perceive
         #     check for clutters
+
+        # for real objects
+        polygons = self.yolo_detector.detect(self.rgb_image)
+
+
 
         # process point cloud
         print("processing point cloud")
@@ -114,12 +132,12 @@ class ClearClutterAction(AbstractAction):
         print(f'number of rois: {len(polygon_rois)}')
 
         # publish all the rois
-        # for i, roi in enumerate(polygon_rois):
-        #     print(f'roi shape: {roi.shape}')
-        #     pc = pc2.create_cloud_xyz32(self.pc.header, roi.reshape((-1, 3)))
-        #     print(f'publishing roi {i}')
-        #     self.pc_pub.publish(pc)
-        #     rospy.sleep(1)
+        for i, roi in enumerate(polygon_rois):
+            print(f'roi shape: {roi.shape}')
+            pc = pc2.create_cloud_xyz32(self.pc.header, roi.reshape((-1, 3)))
+            print(f'publishing roi {i}')
+            self.pc_pub.publish(pc)
+            rospy.sleep(1)
 
         # publish pose array
         if self.debug:
@@ -229,7 +247,12 @@ class ClearClutterAction(AbstractAction):
 
         for polygon in polygons:
             # get the bounding box of the polygon
-            x_min, y_min, x_max, y_max = polygon.bounds
+            # x_min, y_min, x_max, y_max = polygon.bounds
+            # get values from polygon numpy array
+            x_min = polygon[0]
+            y_min = polygon[1]
+            x_max = polygon[2]
+            y_max = polygon[3]
 
             # get the point cloud of the bounding box
             pc = self.pc_array[int(y_min):int(y_max), int(x_min):int(x_max)]
@@ -240,17 +263,24 @@ class ClearClutterAction(AbstractAction):
             # remove nan values
             fpc = fpc[~np.isnan(fpc).any(axis=1)]
 
+            # filter the points based on z value
+            # fpc = fpc[fpc[:, 2] > 0.005]
+
             # get the max z value and min z value of the point cloud
             max_z = np.max(fpc[:, 2])
             min_z = np.min(fpc[:, 2])
-            min_table_z = min(min_z, min_table_z)
+
+            # filter the points based on min_z
+            fpc = fpc[fpc[:, 2] > min_z + 0.005]
+
+            # min_table_z = min(min_z, min_table_z)
 
             # TODO: modify XYZ value calculation
 
-            if min_table_z < 0.0:
-                # adjust the z values
-                max_z += abs(min_table_z)
-                min_z += abs(min_table_z)
+            # if min_table_z < 0.0:
+            #     # adjust the z values
+            #     max_z += abs(min_table_z)
+            #     min_z += abs(min_table_z)
 
             # get the average z value of the point cloud
             middle_z = (max_z + min_z) / 2
@@ -260,8 +290,8 @@ class ClearClutterAction(AbstractAction):
             pca = PCA(n_components=3)
             pca.fit(fpc)
 
-            # get the eigenvector corresponding to the smallest eigenvalue
-            eigenvector = pca.components_[-1]
+            # get the eigenvector corresponding to the largest eigenvalue
+            eigenvector = pca.components_[0]
 
             # get the mean of the point cloud
             mean = np.mean(fpc, axis=0)
@@ -385,6 +415,21 @@ class ClearClutterAction(AbstractAction):
             cv2.waitKey(0)
 
             return True, polygons, cluttered_polygons
+        else:
+            # draw the polygon bounds on the image
+            for polygon in polygons:
+                bounds = polygon.bounds
+                # plot the points of bounds on the image
+                cv2.circle(draw_image, (int(bounds[0]), int(bounds[1])), 5, (0, 0, 255), -1)
+                cv2.circle(draw_image, (int(bounds[2]), int(bounds[3])), 5, (0, 0, 255), -1)
+                # draw the rectangle
+                cv2.rectangle(draw_image, (int(bounds[0]), int(bounds[1])), (int(bounds[2]), int(bounds[3])), (0, 0, 255), 2)
+
+                # get the rectangle bounding box of the polygon
+                
+            
+            cv2.imshow("bounds", draw_image)
+            cv2.waitKey(0)
         
         return False, polygons, []
 
