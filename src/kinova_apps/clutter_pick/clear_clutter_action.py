@@ -37,6 +37,7 @@ class ClearClutterAction(AbstractAction):
         arm: FullArmMovement,
         transform_utils: TransformUtils,
         reference_frame: str = "base_link",
+        debug: bool = False,
     ) -> None:
         super().__init__(arm, transform_utils)
 
@@ -56,6 +57,8 @@ class ClearClutterAction(AbstractAction):
         self.pc_topic = 'input_pointcloud_topic'
 
         self.bridge = cv_bridge.CvBridge()
+
+        self.debug = debug
 
         self.rgb_image = None
         self.pc = None
@@ -119,11 +122,12 @@ class ClearClutterAction(AbstractAction):
         #     rospy.sleep(1)
 
         # publish pose array
-        pose_array = PoseArray()
-        pose_array.header.frame_id = self.reference_frame
-        pose_array.poses = [pose.pose for pose in poses]
-        self.pose_array_pub.publish(pose_array)
-        rospy.sleep(1)
+        if self.debug:
+            pose_array = PoseArray()
+            pose_array.header.frame_id = self.reference_frame
+            pose_array.poses = [pose.pose for pose in poses]
+            self.pose_array_pub.publish(pose_array)
+            rospy.sleep(1)
 
         # pick up the cubes one by one
         for pose in poses:
@@ -133,6 +137,10 @@ class ClearClutterAction(AbstractAction):
 
             # adjust the z
             kpose.z += 0.125
+            success &= self.arm.send_cartesian_pose(kpose)
+
+            # go down
+            kpose.z -= 0.1
             success &= self.arm.send_cartesian_pose(kpose)
 
             # close gripper
