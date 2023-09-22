@@ -9,7 +9,7 @@ from kortex_driver.msg import *
 from kinova_apps.full_arm_movement import FullArmMovement
 from utils.transform_utils import TransformUtils
 
-from kinova_apps.clutter_pick.clear_clutter_action import ClearClutterAction
+from kinova_apps.clutter_pick.clear_clutter_action import ClearClutterAction, ObjectType
 
 
 class ClearClutterTest(object):
@@ -19,7 +19,12 @@ class ClearClutterTest(object):
     def __init__(self):
         self.fam = FullArmMovement()
         self.transform_utils = TransformUtils()
-        self.cc_action = ClearClutterAction(self.fam, self.transform_utils)
+        # get the object type from the parameter server with node name
+        object_type = rospy.get_param(rospy.get_name() + "/object_type", None)
+        if object_type is None:
+            rospy.logerr("object_type not specified")
+            exit()
+        self.cc_action = ClearClutterAction(self.fam, self.transform_utils, int(object_type))
         self.joint_angles = rospy.get_param("joint_angles", None)
         self.setup_arm_for_pick()
 

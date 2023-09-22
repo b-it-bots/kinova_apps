@@ -9,6 +9,8 @@
     <arg name="start_delay_seconds" default="0" />
     <!-- gui flag -->
     <arg name="gui" default="false" />
+    <!-- arg object type: 0-cubes, 1-real objects -->
+    <arg name="object_type" default="1" />
 
     <!-- launch load_config -->
     <include file="$(find kinova_apps)/launch/$(arg app_name)/load_config.launch">
@@ -19,6 +21,7 @@
     <group if="$(eval gui)">
         <include file="$(find kinova_apps)/launch/gui_kinova.launch">
             <arg name="app_name" value="$(arg app_name)" />
+            <arg name="pose_list_names" value="joint_angles,sort_place_poses" />
         </include>
     </group>
 
@@ -36,6 +39,7 @@
             <remap from="camera_info_topic" to="/camera/color/camera_info" />
             <param name="model_path" value="$(arg model_path)" />
             <param name="model_name" value="$(arg model_name)" />
+            <param name="object_type" value="$(arg object_type)" />
         </node>
     </group>
 </launch>
