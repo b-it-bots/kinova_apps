@@ -85,7 +85,7 @@ class ClearClutterAction(AbstractAction):
         # go to perceive table pose
         # get pose from parameter server
         joint_angles_list = rospy.get_param("joint_angles")
-        perceive_table_joint_angles = joint_angles_list["perceive_table"]
+        perceive_table_joint_angles = joint_angles_list["perceive_table_slant"]
 
         success &= self.arm.send_joint_angles(perceive_table_joint_angles)
 
@@ -122,6 +122,12 @@ class ClearClutterAction(AbstractAction):
 
         debug_image, segment_masks = self.yolo_detector.detect_segments(self.rgb_image)
 
+        for mask in segment_masks:
+            cv2.imshow("mask", (segment_masks[mask]*255).astype(np.uint8))
+            cv2.waitKey(0)
+
+        print(f'number of segment masks: {len(segment_masks)}')
+
         # publish debug image
         self.debug_image_pub.publish(self.bridge.cv2_to_imgmsg(debug_image, encoding="passthrough"))
         rospy.sleep(1)
@@ -132,7 +138,7 @@ class ClearClutterAction(AbstractAction):
 
         # get rois of the polygons
         # polygon_rois = self.get_point_clouds_of_polygons(polygons)
-        polygon_rois, poses = self.get_point_clouds_in_polygons(polygons)
+        polygon_rois, poses = self.get_point_cloud_clusters(segment_masks)
 
         print(f'number of rois: {len(polygon_rois)}')
 
@@ -150,7 +156,7 @@ class ClearClutterAction(AbstractAction):
             pose_array.header.frame_id = self.reference_frame
             pose_array.poses = [pose.pose for pose in poses]
             self.pose_array_pub.publish(pose_array)
-            rospy.sleep(1)
+            rospy.sleep(2)
 
         # pick up the cubes one by one
         # for pose in poses:
@@ -243,24 +249,30 @@ class ClearClutterAction(AbstractAction):
 
         return pose, eigenvector
     
-    def get_point_clouds_in_polygons(self, polygons):
+    def get_point_cloud_clusters(self, data):
         
         polys_pcs = []
         poses = []
 
         min_table_z = np.inf
 
-        for polygon in polygons:
-            # get the bounding box of the polygon
-            # x_min, y_min, x_max, y_max = polygon.bounds
-            # get values from polygon numpy array
-            x_min = polygon[0]
-            y_min = polygon[1]
-            x_max = polygon[2]
-            y_max = polygon[3]
+        for element in data:
 
-            # get the point cloud of the bounding box
-            pc = self.pc_array[int(y_min):int(y_max), int(x_min):int(x_max)]
+            # check if element is of type polygon
+            if isinstance(element, Polygon):
+                x_min, y_min, x_max, y_max = element.bounds
+            elif isinstance(element, np.ndarray):
+                x_min = element[0]
+                y_min = element[1]
+                x_max = element[2]
+                y_max = element[3]
+            
+            if not isinstance(element, str):
+                # get the point cloud of the bounding box
+                pc = self.pc_array[int(y_min):int(y_max), int(x_min):int(x_max)]
+            else:
+                # get the point cloud from the mask
+                pc = self.pc_array[data[element].astype(bool)]
 
             # flatten the point cloud
             fpc = pc.reshape((-1, 3))
@@ -295,7 +307,7 @@ class ClearClutterAction(AbstractAction):
             pca = PCA(n_components=3)
             pca.fit(fpc)
 
-            # get the eigenvector corresponding to the largest eigenvalue
+            # get the eigenvector corresponding to the smallest eigenvalue
             eigenvector = pca.components_[0]
 
             # get the mean of the point cloud
