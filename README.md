@@ -48,16 +48,35 @@ Apart from standard Python packages and the ROS Python packages, the following p
 
 ## Launch
 
-Run each of the following in separate terminals:
+- Launch the necessary nodes to bringup the arm and the camera.
 
-```
-roscore
-roslaunch kortex_driver kortex_driver.launch
-roslaunch kinova_vision kinova_vision_rgbd.launch
-```
+- Run each of the following in separate terminals:
 
-Visualize debug images and TF tree in RViz using [config/kinova.rviz](config/robothon.rviz)
+  ```
+  roscore
+  roslaunch kortex_driver kortex_driver.launch
+  roslaunch kinova_vision kinova_vision_rgbd.launch
+  ```
 
+  Visualize debug images and TF tree in RViz using [config/kinova.rviz](config/robothon.rviz)
+
+  
+## Apps
+
+### Clutter Pick and Place
+
+- Launch the clutter pick and place app
+
+  ```
+  roslaunch kinova_apps clear_clutter_action.launch gui:=false object_type:=1
+  ```
+
+  - `object_type`: 0 - cubes, 1 - real objects
+  - real objects list: cup, bowl, fork, spoon, toothbrush, toothpase
+  - `gui`: true - show gui, false - no gui
+- Once launched, the app will go to a perceive pose and detect cubes/objects on the table. The detection results are published to the rviz. The arm will then pick the objects and drops it on the left side.
+
+> Other apps are not refractored yet.
 
 ## Software
 We mainly use Python for development (with one component in C++), and ROS Noetic for interprocess communication, including communication with the [kortex_driver](https://github.com/Kinovarobotics/ros_kortex). For vision, we use the [kinova_vision](https://github.com/Kinovarobotics/ros_kortex_vision) ROS package to publish RGB images and point clouds from the wrist-mounted camera, and [OpenCV](https://opencv.org/) for processing the RGB images and [PCL](https://pointclouds.org/) for some minor point cloud processing.
@@ -73,7 +92,7 @@ For several tasks, the robot arm needs to be accurately aligned with features in
 Visual servoing is only performed in the X-Y plane, and depending on the task we have a target element which we align to. For the task, we define the target position for the selected element, and move the arm in velocity control mode until the selected element is at the target position.
 
 <p float="left">
-  <img src="docs/images/plug_insert/red_port_vs.gif" width="250" />
+  <img src="docs/source/old_data/images/plug_insert/red_port_vs.gif" width="250" />
 </p>
 
 ### Task sequence
@@ -94,9 +113,9 @@ pip install ultralytics
 
 Use the `YoloDetector` for obtaining the semantic mask for each object. Please refer to the below code,
 ```
-scripts/clutter_pick/perception.py
+src/kinova_apps/clutter_pick/object_detection.py
 ```
 
 <p float="left">
-  <img src="docs/images/segmentation/segmentation.png" width="1000" />
+  <img src="docs/source/old_data/images/segmentation/segmentation.png" width="1000" />
 </p>

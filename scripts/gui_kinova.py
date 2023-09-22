@@ -192,8 +192,12 @@ class GuiKinova(object):
     def __init__(self):
         # get parameter from launch file
         self.pose_list_names = rospy.get_param(
-            "pose_list_names", ["joint_angles"]
+            rospy.get_name() + "/pose_list_names", ["joint_angles"]
         )
+
+        # convert to list if not already
+        if not isinstance(self.pose_list_names, list):
+            self.pose_list_names = self.pose_list_names.split(",")
 
         # get the respective lists from the parameter server
         self.lists = []

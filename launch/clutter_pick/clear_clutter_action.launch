@@ -21,6 +21,7 @@
     <group if="$(eval gui)">
         <include file="$(find kinova_apps)/launch/gui_kinova.launch">
             <arg name="app_name" value="$(arg app_name)" />
+            <arg name="pose_list_names" value="joint_angles,sort_place_poses" />
         </include>
     </group>
 
