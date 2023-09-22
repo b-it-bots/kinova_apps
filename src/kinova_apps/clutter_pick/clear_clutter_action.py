@@ -30,6 +30,8 @@ from kinova_apps.full_arm_movement import FullArmMovement
 from utils.transform_utils import TransformUtils
 from utils.kinova_pose import KinovaPose, get_kinovapose_from_pose_stamped
 
+from kinova_apps.clutter_pick.object_detction import YoloDetector
+
 
 class ClearClutterAction(AbstractAction):
     def __init__(
@@ -37,6 +39,7 @@ class ClearClutterAction(AbstractAction):
         arm: FullArmMovement,
         transform_utils: TransformUtils,
         reference_frame: str = "base_link",
+        debug: bool = True,
     ) -> None:
         super().__init__(arm, transform_utils)
 
@@ -46,8 +49,11 @@ class ClearClutterAction(AbstractAction):
             "/my_gen3/in/cartesian_velocity", kortex_driver.msg.TwistCommand, queue_size=1
         )
 
+        # publisher for debug image
+        self.debug_image_pub = rospy.Publisher("/debug_image", Image, queue_size=10)
+
         # publisher for transform point cloud
-        self.pc_pub = rospy.Publisher("/transformed_point_cloud", PointCloud2, queue_size=10)
+        self.pc_pub = rospy.Publisher("/pc_rois", PointCloud2, queue_size=10)
 
         # publisher for pose array
         self.pose_array_pub = rospy.Publisher("/pose_array", PoseArray, queue_size=10)
@@ -57,18 +63,29 @@ class ClearClutterAction(AbstractAction):
 
         self.bridge = cv_bridge.CvBridge()
 
+        self.debug = debug
+
         self.rgb_image = None
         self.pc = None
+
+        # get node name
+        node_name = rospy.get_name()
+        model_path = rospy.get_param(node_name + "/model_path")
+        model_name = rospy.get_param(node_name + "/model_name")
+
+        model = model_path + model_name
+
+        self.yolo_detector = YoloDetector(model)
 
     def pre_perceive(self) -> bool:
         success = True
         # open gripper before picking
-        success &= self.arm.execute_gripper_command(1.0)
+        success &= self.arm.execute_gripper_command(0.0)
 
         # go to perceive table pose
         # get pose from parameter server
         joint_angles_list = rospy.get_param("joint_angles")
-        perceive_table_joint_angles = joint_angles_list["perceive_table"]
+        perceive_table_joint_angles = joint_angles_list["perceive_table_slant"]
 
         success &= self.arm.send_joint_angles(perceive_table_joint_angles)
 
@@ -91,14 +108,29 @@ class ClearClutterAction(AbstractAction):
         while self.rgb_image is None:
             rospy.sleep(0.1)
 
-        has_clutter, polygons, clutter_polys = self.process_image_with_cubes(self.rgb_image)
+        # has_clutter, polygons, clutter_polys = self.process_image_with_cubes(self.rgb_image)
 
-        if has_clutter:
-            pass
+        # if has_clutter:
+        #     pass
         #     self.attack_clutter(polygons)
         #    # go to perceive table pose
         #     re-perceive
         #     check for clutters
+
+        # for real objects
+        # debug_image, polygons = self.yolo_detector.detect(self.rgb_image)
+
+        debug_image, segment_masks = self.yolo_detector.detect_segments(self.rgb_image)
+
+        for mask in segment_masks:
+            cv2.imshow("mask", (segment_masks[mask]*255).astype(np.uint8))
+            cv2.waitKey(0)
+
+        print(f'number of segment masks: {len(segment_masks)}')
+
+        # publish debug image
+        self.debug_image_pub.publish(self.bridge.cv2_to_imgmsg(debug_image, encoding="passthrough"))
+        rospy.sleep(1)
 
         # process point cloud
         print("processing point cloud")
@@ -106,44 +138,49 @@ class ClearClutterAction(AbstractAction):
 
         # get rois of the polygons
         # polygon_rois = self.get_point_clouds_of_polygons(polygons)
-        polygon_rois, poses = self.get_point_clouds_in_polygons(polygons)
+        polygon_rois, poses = self.get_point_cloud_clusters(segment_masks)
 
         print(f'number of rois: {len(polygon_rois)}')
 
         # publish all the rois
-        # for i, roi in enumerate(polygon_rois):
-        #     print(f'roi shape: {roi.shape}')
-        #     pc = pc2.create_cloud_xyz32(self.pc.header, roi.reshape((-1, 3)))
-        #     print(f'publishing roi {i}')
-        #     self.pc_pub.publish(pc)
-        #     rospy.sleep(1)
+        for i, roi in enumerate(polygon_rois):
+            print(f'roi shape: {roi.shape}')
+            pc = pc2.create_cloud_xyz32(self.pc.header, roi.reshape((-1, 3)))
+            print(f'publishing roi {i}')
+            self.pc_pub.publish(pc)
+            rospy.sleep(1)
 
         # publish pose array
-        pose_array = PoseArray()
-        pose_array.header.frame_id = self.reference_frame
-        pose_array.poses = [pose.pose for pose in poses]
-        self.pose_array_pub.publish(pose_array)
-        rospy.sleep(1)
+        if self.debug:
+            pose_array = PoseArray()
+            pose_array.header.frame_id = self.reference_frame
+            pose_array.poses = [pose.pose for pose in poses]
+            self.pose_array_pub.publish(pose_array)
+            rospy.sleep(2)
 
         # pick up the cubes one by one
-        for pose in poses:
-            kpose: KinovaPose = get_kinovapose_from_pose_stamped(pose)
-            # open gripper
-            success &= self.arm.execute_gripper_command(0.0)
+        # for pose in poses:
+        #     kpose: KinovaPose = get_kinovapose_from_pose_stamped(pose)
+        #     # open gripper
+        #     success &= self.arm.execute_gripper_command(0.0)
 
-            # adjust the z
-            kpose.z += 0.125
-            success &= self.arm.send_cartesian_pose(kpose)
+        #     # adjust the z
+        #     kpose.z += 0.125
+        #     success &= self.arm.send_cartesian_pose(kpose)
 
-            # close gripper
-            success &= self.arm.execute_gripper_command(1.0)
+        #     # go down
+        #     kpose.z -= 0.1
+        #     success &= self.arm.send_cartesian_pose(kpose)
 
-            # go up
-            kpose.z += 0.1
-            success &= self.arm.send_cartesian_pose(kpose)
+        #     # close gripper
+        #     success &= self.arm.execute_gripper_command(1.0)
 
-            # open gripper
-            success &= self.arm.execute_gripper_command(0.0)
+        #     # go up
+        #     kpose.z += 0.1
+        #     success &= self.arm.send_cartesian_pose(kpose)
+
+        #     # open gripper
+        #     success &= self.arm.execute_gripper_command(0.0)
 
 
         return success
@@ -212,19 +249,30 @@ class ClearClutterAction(AbstractAction):
 
         return pose, eigenvector
     
-    def get_point_clouds_in_polygons(self, polygons):
+    def get_point_cloud_clusters(self, data):
         
         polys_pcs = []
         poses = []
 
         min_table_z = np.inf
 
-        for polygon in polygons:
-            # get the bounding box of the polygon
-            x_min, y_min, x_max, y_max = polygon.bounds
+        for element in data:
 
-            # get the point cloud of the bounding box
-            pc = self.pc_array[int(y_min):int(y_max), int(x_min):int(x_max)]
+            # check if element is of type polygon
+            if isinstance(element, Polygon):
+                x_min, y_min, x_max, y_max = element.bounds
+            elif isinstance(element, np.ndarray):
+                x_min = element[0]
+                y_min = element[1]
+                x_max = element[2]
+                y_max = element[3]
+            
+            if not isinstance(element, str):
+                # get the point cloud of the bounding box
+                pc = self.pc_array[int(y_min):int(y_max), int(x_min):int(x_max)]
+            else:
+                # get the point cloud from the mask
+                pc = self.pc_array[data[element].astype(bool)]
 
             # flatten the point cloud
             fpc = pc.reshape((-1, 3))
@@ -232,17 +280,24 @@ class ClearClutterAction(AbstractAction):
             # remove nan values
             fpc = fpc[~np.isnan(fpc).any(axis=1)]
 
+            # filter the points based on z value
+            # fpc = fpc[fpc[:, 2] > 0.005]
+
             # get the max z value and min z value of the point cloud
             max_z = np.max(fpc[:, 2])
             min_z = np.min(fpc[:, 2])
-            min_table_z = min(min_z, min_table_z)
+
+            # filter the points based on min_z
+            fpc = fpc[fpc[:, 2] > min_z + 0.005]
+
+            # min_table_z = min(min_z, min_table_z)
 
             # TODO: modify XYZ value calculation
 
-            if min_table_z < 0.0:
-                # adjust the z values
-                max_z += abs(min_table_z)
-                min_z += abs(min_table_z)
+            # if min_table_z < 0.0:
+            #     # adjust the z values
+            #     max_z += abs(min_table_z)
+            #     min_z += abs(min_table_z)
 
             # get the average z value of the point cloud
             middle_z = (max_z + min_z) / 2
@@ -253,7 +308,7 @@ class ClearClutterAction(AbstractAction):
             pca.fit(fpc)
 
             # get the eigenvector corresponding to the smallest eigenvalue
-            eigenvector = pca.components_[-1]
+            eigenvector = pca.components_[0]
 
             # get the mean of the point cloud
             mean = np.mean(fpc, axis=0)
@@ -377,6 +432,21 @@ class ClearClutterAction(AbstractAction):
             cv2.waitKey(0)
 
             return True, polygons, cluttered_polygons
+        else:
+            # draw the polygon bounds on the image
+            for polygon in polygons:
+                bounds = polygon.bounds
+                # plot the points of bounds on the image
+                cv2.circle(draw_image, (int(bounds[0]), int(bounds[1])), 5, (0, 0, 255), -1)
+                cv2.circle(draw_image, (int(bounds[2]), int(bounds[3])), 5, (0, 0, 255), -1)
+                # draw the rectangle
+                cv2.rectangle(draw_image, (int(bounds[0]), int(bounds[1])), (int(bounds[2]), int(bounds[3])), (0, 0, 255), 2)
+
+                # get the rectangle bounding box of the polygon
+                
+            
+            cv2.imshow("bounds", draw_image)
+            cv2.waitKey(0)
         
         return False, polygons, []
 
