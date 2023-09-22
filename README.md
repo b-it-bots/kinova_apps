@@ -85,3 +85,18 @@ The `kortex_driver` accepts a sequence of Cartesian waypoints, and generates a t
 ### Graphical user interface
 To ease recording and replaying poses and trajectories a graphical user interface was developed. A more detailed description can be found in the [docs](docs/gui.md).
 
+### Semantic Segmentation
+To perform semantic segmentation we use yolo ultralytics library to train a custom segmentation model.
+
+```
+pip install ultralytics
+```
+
+Use the `YoloDetector` for obtaining the semantic mask for each object. Please refer to the below code,
+```
+scripts/clutter_pick/perception.py
+```
+
+<p float="left">
+  <img src="docs/images/segmentation/segmentation.png" width="1000" />
+</p>
