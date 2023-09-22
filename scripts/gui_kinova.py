@@ -54,11 +54,12 @@ class Item:
 class ItemList:
     """A class that represents a list of items and provides methods to interact with the list."""
 
-    def __init__(self):
+    def __init__(self, name: str = None):
         """
         Initializes an instance of the ItemList class with an empty list of items.
         """
         self.items: List[Item] = []
+        self.name = name
 
     def add_item(self, item: Item) -> None:
         """
@@ -182,17 +183,22 @@ class ListWindow(tk.Frame):
 class GuiKinova(object):
     """
     A class that represents a gui component for interacting with kinova arm.
+
+    Supported lists:
+        - joint_angles in degrees
+        - cartesian_poses as a KinovaPose
     """
 
     def __init__(self):
-        # get parameter with namespaced
-        self.joint_angles = rospy.get_param("joint_angles", None)
-        # self.probe_action_poses = rospy.get_param("~probe_action_poses", None)
-        # self.wind_cable_poses = rospy.get_param("~wind_poses", None)
-        # self.byod_poses = rospy.get_param("~byod_poses", None)
-        # self.fixed_transforms = rospy.get_param("~fixed_transforms")
+        # get parameter from launch file
+        self.pose_list_names = rospy.get_param(
+            "pose_list_names", ["joint_angles"]
+        )
 
-        self.lists = [self.joint_angles]
+        # get the respective lists from the parameter server
+        self.lists = []
+        for name in self.pose_list_names:
+            self.lists.append(rospy.get_param(name))
 
         self.arm = FullArmMovement()
         self.transform_utils = TransformUtils()
@@ -207,103 +213,53 @@ class GuiKinova(object):
         self.master.title("Kinova Arm GUI")
         self.master.geometry("1500x2000")
 
-    def render_lists(self, noetbook: ttk.Notebook):
-        # keep 3 lists in a frame
-        frame = ttk.Frame(noetbook)
+    def render_data(self, noetbook: ttk.Notebook):
+        # create number of frames equal to number of lists / 3
+        num_frames = math.ceil(len(self.lists) / 3)
 
-        # joint angles
-        joint_angles = [
-            (joint_angle, self.joint_angles[joint_angle])
-            for joint_angle in self.joint_angles.keys()
-        ]
+        for i in range(num_frames):
+            frame = ttk.Frame(noetbook)
+            # get the list of items for the frame
+            list = self.lists[i * 3 : (i + 1) * 3]
+            self.render_lists(frame, i, list)
+            noetbook.add(frame, text=f"frame {i}")
 
-        joint_anlges_list = ItemList()
-        joint_anlges_list.add_items(joint_angles)
+    def get_method_for_list_type(self, list_type: str):
+        if list_type == "joint_angles":
+            return self.joint_angles_cb
+        elif list_type == "trajectories":
+            return self.trajectories_cb
+        elif list_type == "fixed_transforms":
+            return self.fixed_transforms_cb
+        elif list_type == "cartesian_poses":
+            return self.cartesian_poses_cb
+        else:
+            return None
 
-        joint_angles_window = ListWindow(
-            frame, "joint angles", joint_anlges_list, self.joint_angles_cb
-        )
-        joint_angles_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    def render_lists(self, frame: tk.Frame, frame_num: int, lists: List):
+        # create a frame for each list
+        for i, l in enumerate(lists):
+            item_list = ItemList()
+            poses = []
 
-        # # trajectories
-        # trajectories = [(trajectory, self.trajectories[trajectory]) for trajectory in self.trajectories.keys()]
+            list_type = l["type"]
+            list_data = l["data"]
 
-        # trajectories_list = ItemList()
-        # trajectories_list.add_items(trajectories)
+            # get matching method for list type
+            method = self.get_method_for_list_type(list_type)
 
-        # trajectories_window = ListWindow(frame, 'trajectories', trajectories_list, self.trajectories_cb)
-        # trajectories_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            for key, value in list_data.items():
+                poses.append((key, value))
 
-        # fixed transforms
-        # fixed_transform_link_names = [
-        #     (link_name.replace("board_to_", "") + "_link", "")
-        #     for link_name in self.fixed_transforms
-        # ]
+            item_list.add_items(poses)
 
-        # fixed_transforms_list = ItemList()
-        # fixed_transforms_list.add_items(fixed_transform_link_names)
-
-        # fixed_transforms_window = ListWindow(
-        #     frame,
-        #     "fixed transforms",
-        #     fixed_transforms_list,
-        #     self.fixed_transforms_cb,
-        # )
-        # fixed_transforms_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        # wind cable poses
-        # wind_cable_poses = [
-        #     (pose, self.wind_cable_poses[pose])
-        #     for pose in self.wind_cable_poses
-        # ]
-
-        # wind_cable_poses_list = ItemList()
-        # wind_cable_poses_list.add_items(wind_cable_poses)
-
-        # wind_cable_poses_window = ListWindow(
-        #     frame,
-        #     "winding poses",
-        #     wind_cable_poses_list,
-        #     self.wind_cable_poses_cb,
-        # )
-        # wind_cable_poses_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        # probe action poses
-        # probe_action_poses = [
-        #     (pose, get_kinovapose_from_list(self.probe_action_poses[pose]))
-        #     for pose in self.probe_action_poses.keys()
-        # ]
-
-        # probe_action_poses_list = ItemList()
-        # probe_action_poses_list.add_items(probe_action_poses)
-
-        # probe_action_poses_window = ListWindow(
-        #     frame,
-        #     "probe action poses",
-        #     probe_action_poses_list,
-        #     self.probe_action_poses_cb,
-        # )
-        # probe_action_poses_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        # second frame
-        frame2 = ttk.Frame(noetbook)
-
-        # byod poses
-        # byod_poses = []
-        # for key, i in zip(self.byod_poses.keys(), self.byod_poses.values()):
-        #     byod_poses.append((key, get_kinovapose_from_list(list(i.values()))))
-
-        # byod_poses_list = ItemList()
-        # byod_poses_list.add_items(byod_poses)
-
-        # byod_poses_window = ListWindow(
-        #     frame2, "byod poses", byod_poses_list, self.byod_poses_cb
-        # )
-        # byod_poses_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        # add frames to notebook
-        noetbook.add(frame, text="frame1")
-        noetbook.add(frame2, text="frame2")
+            list_window = ListWindow(
+                frame,
+                self.pose_list_names[frame_num * 3 + i],
+                item_list,
+                method,
+            )
+            list_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
     def fixed_transforms_cb(self, item: Item):
         link_name = item.name
@@ -341,14 +297,12 @@ class GuiKinova(object):
             "Fixed Transform sent to robot.\n Added 10cm +z offset for safety",
         )
 
-    def probe_action_poses_cb(self, item: Item):
+    def cartesian_poses_cb(self, item: Item):
         pose = item.value
         success = self.arm.send_cartesian_pose(pose)
 
         # display popup window to inform user
-        messagebox.showinfo(
-            "Probe Action Pose", "Probe Action Pose sent to robot"
-        )
+        messagebox.showinfo("Cartesian Pose", "Pose sent to robot")
 
     def byod_poses_cb(self, item: Item):
         kp = item.value
@@ -716,7 +670,7 @@ class GuiKinova(object):
         )  # Configure row 0 to take all extra space
 
         # Create and configure the window's contents
-        self.render_lists(self.noetbook)
+        self.render_data(self.noetbook)
 
         gripper_frame = tk.Frame(self.master)
         gripper_frame.grid(

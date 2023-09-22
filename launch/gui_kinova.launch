@@ -4,6 +4,9 @@
     <!-- argument: app name -->
     <arg name="app_name" default="gui_kinova" />
 
+    <!-- argument: pose list names -->
+    <arg name="pose_list_names" default="joint_angles" />
+
     <group if="$(eval app_name == 'gui_kinova')">
         <include file="$(find kinova_apps)/launch/load_default_config.launch" >
             <arg name="app_name" value="$(arg app_name)" />
@@ -11,7 +14,9 @@
     </group>
 
     <group ns="$(arg app_name)">
-        <node pkg="kinova_apps" type="gui_kinova.py" name="gui_kinova_node" output="screen" />
+        <node pkg="kinova_apps" type="gui_kinova.py" name="gui_kinova_node" output="screen">
+            <param name="pose_list_names" value="$(arg pose_list_names)" />
+        </node>
     </group>
 
 </launch>
