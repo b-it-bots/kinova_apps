@@ -118,7 +118,9 @@ class ClearClutterAction(AbstractAction):
         #     check for clutters
 
         # for real objects
-        debug_image, polygons = self.yolo_detector.detect(self.rgb_image)
+        # debug_image, polygons = self.yolo_detector.detect(self.rgb_image)
+
+        debug_image, segment_masks = self.yolo_detector.detect_segments(self.rgb_image)
 
         # publish debug image
         self.debug_image_pub.publish(self.bridge.cv2_to_imgmsg(debug_image, encoding="passthrough"))
@@ -151,28 +153,28 @@ class ClearClutterAction(AbstractAction):
             rospy.sleep(1)
 
         # pick up the cubes one by one
-        for pose in poses:
-            kpose: KinovaPose = get_kinovapose_from_pose_stamped(pose)
-            # open gripper
-            success &= self.arm.execute_gripper_command(0.0)
+        # for pose in poses:
+        #     kpose: KinovaPose = get_kinovapose_from_pose_stamped(pose)
+        #     # open gripper
+        #     success &= self.arm.execute_gripper_command(0.0)
 
-            # adjust the z
-            kpose.z += 0.125
-            success &= self.arm.send_cartesian_pose(kpose)
+        #     # adjust the z
+        #     kpose.z += 0.125
+        #     success &= self.arm.send_cartesian_pose(kpose)
 
-            # go down
-            kpose.z -= 0.1
-            success &= self.arm.send_cartesian_pose(kpose)
+        #     # go down
+        #     kpose.z -= 0.1
+        #     success &= self.arm.send_cartesian_pose(kpose)
 
-            # close gripper
-            success &= self.arm.execute_gripper_command(1.0)
+        #     # close gripper
+        #     success &= self.arm.execute_gripper_command(1.0)
 
-            # go up
-            kpose.z += 0.1
-            success &= self.arm.send_cartesian_pose(kpose)
+        #     # go up
+        #     kpose.z += 0.1
+        #     success &= self.arm.send_cartesian_pose(kpose)
 
-            # open gripper
-            success &= self.arm.execute_gripper_command(0.0)
+        #     # open gripper
+        #     success &= self.arm.execute_gripper_command(0.0)
 
 
         return success

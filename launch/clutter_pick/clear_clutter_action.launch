@@ -25,7 +25,7 @@
     <!-- arg for model path -->
     <arg name="model_path" default="$(find kinova_apps)/models/$(arg app_name)/" />
     <!-- arg for model name -->
-    <arg name="model_name" default="best.pt" />
+    <arg name="model_name" default="best_segmentation.pt" />
 
     <!-- launch node with namespace -->
     <group ns="$(arg app_name)">
