@@ -1,5 +1,6 @@
 from typing import List
 from ultralytics import YOLO
+from ultralytics.utils.plotting import Annotator 
 import numpy as np
 import cv2
 import cv_bridge
@@ -14,17 +15,26 @@ class YoloDetector:
         self.bridge = cv_bridge.CvBridge()
 
     def detect(self, img: Image):
-        # convert image to cv2
-        cv_image = self.bridge.imgmsg_to_cv2(img, desired_encoding='passthrough')
+        img = self.bridge.imgmsg_to_cv2(img, desired_encoding='passthrough')
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        results = self.model.predict(source=img, conf=0.25)
 
-        # convert to bgr
-        cv_image = cv2.cvtColor(cv_image, cv2.COLOR_RGB2BGR)
-
-        results = self.model.predict(source=cv_image, conf=0.25)
+        for r in results:
+        
+            annotator = Annotator(img)
+            
+            boxes = r.boxes
+            for box in boxes:
+                
+                b = box.xyxy[0]  # get box coordinates in (top, left, bottom, right) format
+                c = box.cls
+                annotator.box_label(b, self.model.names[int(c)])
+            
+        frame = annotator.result()
 
         predicted_boxes = results[0].boxes.xyxy.cpu().numpy().astype(int)
 
-        return predicted_boxes
+        return frame, predicted_boxes
     
 
 

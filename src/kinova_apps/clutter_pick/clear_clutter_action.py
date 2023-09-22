@@ -68,9 +68,10 @@ class ClearClutterAction(AbstractAction):
         self.rgb_image = None
         self.pc = None
 
-        # get model path from launch file
-        model_path = rospy.get_param("model_path")
-        model_name = rospy.get_param("model_name")
+        # get node name
+        node_name = rospy.get_name()
+        model_path = rospy.get_param(node_name + "/model_path")
+        model_name = rospy.get_param(node_name + "/model_name")
 
         model = model_path + model_name
 
@@ -79,7 +80,7 @@ class ClearClutterAction(AbstractAction):
     def pre_perceive(self) -> bool:
         success = True
         # open gripper before picking
-        success &= self.arm.execute_gripper_command(1.0)
+        success &= self.arm.execute_gripper_command(0.0)
 
         # go to perceive table pose
         # get pose from parameter server
@@ -117,9 +118,11 @@ class ClearClutterAction(AbstractAction):
         #     check for clutters
 
         # for real objects
-        polygons = self.yolo_detector.detect(self.rgb_image)
+        debug_image, polygons = self.yolo_detector.detect(self.rgb_image)
 
-
+        # publish debug image
+        self.debug_image_pub.publish(self.bridge.cv2_to_imgmsg(debug_image, encoding="passthrough"))
+        rospy.sleep(1)
 
         # process point cloud
         print("processing point cloud")
