@@ -112,6 +112,8 @@ class ClearClutterAction(AbstractAction):
 
         self.yolo_detector = YoloDetector(model)
 
+        self.pick_objects = rospy.get_param(node_name + "/pick_objects")
+
     def pre_perceive(self) -> bool:
         success = True
         # open gripper before picking
@@ -192,49 +194,56 @@ class ClearClutterAction(AbstractAction):
             pose_array.header.frame_id = self.reference_frame
             pose_array.poses = [pose.pose for pose in poses]
             self.pose_array_pub.publish(pose_array)
+            
+        if self.pick_objects:
 
-        # pick up the cubes one by one
-        for i, pose in enumerate(poses):
-            kpose: KinovaPose = get_kinovapose_from_pose_stamped(pose)
-            # open gripper
-            success &= self.arm.execute_gripper_command(0.0)
+            # pick up the cubes one by one
+            for i, pose in enumerate(poses):
+                kpose: KinovaPose = get_kinovapose_from_pose_stamped(pose)
 
-            # adjust the z
-            kpose.z += 0.125
-            # add 90 degrees to the orientation
-            kpose.theta_z_deg += 90
-            success &= self.arm.send_cartesian_pose(kpose)
+                if self.object_type == ObjectType.CUBES:
+                    # open gripper
+                    success &= self.arm.execute_gripper_command(0.25)
+                else:
+                    # open gripper
+                    success &= self.arm.execute_gripper_command(0.0)
 
-            # go down
-            kpose.z -= 0.1
-            success &= self.arm.send_cartesian_pose(kpose)
+                # adjust the z
+                kpose.z += 0.13
+                # add 90 degrees to the orientation
+                kpose.theta_z_deg += 180
+                success &= self.arm.send_cartesian_pose(kpose)
 
-            # close gripper to pick
-            success &= self.arm.execute_gripper_command(1.0)
+                # go down
+                kpose.z -= 0.1
+                success &= self.arm.send_cartesian_pose(kpose)
 
-            # go up
-            kpose.z += 0.1
-            success &= self.arm.send_cartesian_pose(kpose)
+                # close gripper to pick
+                success &= self.arm.execute_gripper_command(1.0)
 
-            # go to sort place
-            # get the name of the object
-            if self.object_type == ObjectType.CUBES:
-                object_class = detections[i][0]
-            elif self.object_type == ObjectType.REAL_OBJECTS:
-                object_name = list(detections.keys())[i]
-                object_class = object_map[object_name]
+                # go up
+                kpose.z += 0.1
+                success &= self.arm.send_cartesian_pose(kpose)
 
-            print(f"object class: {object_class}")
+                # go to sort place
+                # get the name of the object
+                if self.object_type == ObjectType.CUBES:
+                    object_class = detections[i][0]
+                elif self.object_type == ObjectType.REAL_OBJECTS:
+                    object_name = list(detections.keys())[i]
+                    object_class = object_map[object_name]
 
-            # get the joint angles for the object
-            # joint_angles = self.sort_place_joint_angles[object_class]
-            joint_angles = self.sort_place_joint_angles['default']
+                print(f"object class: {object_class}")
 
-            # send joint angles
-            success &= self.arm.send_joint_angles(joint_angles)
+                # get the joint angles for the object
+                # joint_angles = self.sort_place_joint_angles[object_class]
+                joint_angles = self.sort_place_joint_angles['default']
 
-            # open gripper
-            success &= self.arm.execute_gripper_command(0.0)
+                # send joint angles
+                success &= self.arm.send_joint_angles(joint_angles)
+
+                # open gripper
+                success &= self.arm.execute_gripper_command(0.0)
 
         return success
 
@@ -271,6 +280,8 @@ class ClearClutterAction(AbstractAction):
         Computes the pose of the polygon using PCA.
         """
         coords = np.array(polygon.exterior.coords.xy).T
+
+
 
         # compute pca
         mean = np.mean(coords, axis=0)
@@ -312,21 +323,11 @@ class ClearClutterAction(AbstractAction):
         poses = []
 
         for element in data:
-            # check element type
-            if isinstance(element, tuple):
-                c, poly = element
-                x_min, y_min, x_max, y_max = poly.bounds
-            elif isinstance(element, np.ndarray):
-                x_min = element[0]
-                y_min = element[1]
-                x_max = element[2]
-                y_max = element[3]
 
-            if not isinstance(element, str):
-                # get the point cloud of the bounding box
-                pc = self.pc_array[
-                    int(y_min) : int(y_max), int(x_min) : int(x_max)
-                ]
+            if self.object_type == ObjectType.CUBES:
+                # get the point cloud of the mask
+                print(f'getting pc from mask.')
+                pc = self.pc_array[element[1].astype(bool)]
             else:
                 # get the point cloud from the mask
                 pc = self.pc_array[data[element].astype(bool)]
@@ -341,7 +342,7 @@ class ClearClutterAction(AbstractAction):
             max_z = np.max(fpc[:, 2])
             min_z = np.min(fpc[:, 2])
 
-            if isinstance(element, str):
+            if self.object_type == ObjectType.REAL_OBJECTS:
                 print(f"element: {element}")
                 # if the element is 'cup'
                 if element == "cup" or element == "bowl" or element == "mug":
@@ -356,17 +357,27 @@ class ClearClutterAction(AbstractAction):
                 # get the average z value of the point cloud
                 middle_z = (max_z + min_z) / 2
 
-            pca = PCA(n_components=3)
-            pca.fit(fpc)
-
-            # get the eigenvector corresponding to the smallest eigenvalue
-            eigenvector = pca.components_[0]
-
             # get the mean of the point cloud
             mean = np.mean(fpc, axis=0)
 
-            # get the angle of the eigenvector
-            angle = np.arctan2(eigenvector[1], eigenvector[0])
+            if self.object_type == ObjectType.CUBES:
+                angle = element[2]
+                # transform the angle from cv coordinate system to real world coordinate system
+                angle = 2 * np.pi - angle
+                # convert the angle to 0 to 360 degrees range
+                if angle < 0:
+                    angle += 2 * np.pi
+                # subtract 90 degrees from the angle
+                angle -= np.pi / 2
+            else:
+                pca = PCA(n_components=3)
+                pca.fit(fpc)
+
+                # get the eigenvector corresponding to the smallest eigenvalue
+                eigenvector = pca.components_[0]
+
+                # get the angle of the eigenvector
+                angle = np.arctan2(eigenvector[1], eigenvector[0])
 
             # define pose
             pose = PoseStamped()
@@ -425,8 +436,7 @@ class ClearClutterAction(AbstractAction):
     def process_image_with_cubes(
         self, image: Image
     ) -> [bool, List[Polygon], List[Polygon]]:
-        detections = {}
-
+        
         # convert image to cv2
         cv_image = self.bridge.imgmsg_to_cv2(
             image, desired_encoding="passthrough"
@@ -454,20 +464,21 @@ class ClearClutterAction(AbstractAction):
 
         # get polygons for each color
         polygons = {}
+        detected_masks = {}
         for i, color in enumerate(colors):
-            polygons[color] = self.apply_mask_and_get_polygons(
-                cv_image, masks[i]
-            )
-
-        # detections = polygons.copy()
+            dmask, polys = self.apply_mask_and_get_masks(cv_image, masks[i])
+            detected_masks[color] = dmask
+            polygons[color] = polys
 
         # combine all polygons
         polygons = [(color, p) for color in polygons for p in polygons[color]]
+        detected_masks = [(color, dmask) for color in detected_masks for dmask in detected_masks[color]]
 
         draw_image = cv_image.copy()
 
         # check if two or more polygons are close to each other
-        cluttered_polygons = self.check_polygons(polygons)
+        cluttered_polygons, free_poly_indices = self.check_polygons(polygons)
+
 
         if len(cluttered_polygons) > 0:
             # draw cluttered polygons
@@ -481,42 +492,79 @@ class ClearClutterAction(AbstractAction):
                 self.bridge.cv2_to_imgmsg(draw_image, encoding="passthrough")
             )
 
-            return True, polygons, cluttered_polygons
-        else:
-            # draw the polygon bounds on the image
-            for c, poly in polygons:
-                bounds = poly.bounds
-                # plot the points of bounds on the image
-                cv2.circle(
-                    draw_image,
-                    (int(bounds[0]), int(bounds[1])),
-                    5,
-                    (0, 0, 255),
-                    -1,
-                )
-                cv2.circle(
-                    draw_image,
-                    (int(bounds[2]), int(bounds[3])),
-                    5,
-                    (0, 0, 255),
-                    -1,
-                )
-                # draw the rectangle
-                cv2.rectangle(
-                    draw_image,
-                    (int(bounds[0]), int(bounds[1])),
-                    (int(bounds[2]), int(bounds[3])),
-                    (0, 0, 255),
-                    2,
-                )
+        angles = []
+        for i, (c, dmask) in enumerate(detected_masks):
+            if i not in free_poly_indices:
+                continue
 
-                # get the rectangle bounding box of the polygon
+            dmask = cv2.cvtColor(dmask, cv2.COLOR_GRAY2BGR)
 
-            self.debug_image_pub.publish(
-                self.bridge.cv2_to_imgmsg(draw_image, encoding="passthrough")
+            # get the contours from the mask
+            # convert dmask to 8uc1
+            dmask = cv2.cvtColor(dmask, cv2.COLOR_BGR2GRAY)
+            contours, hierarchy = cv2.findContours(
+                dmask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
             )
 
-        return False, polygons, []
+            # remove small contours
+            contours = [c for c in contours if cv2.contourArea(c) > 1000]
+
+            # get the contour with the largest area
+            contour = max(contours, key=cv2.contourArea)
+
+            # fit a square to the contour
+            rect = cv2.minAreaRect(contour)
+            box = cv2.boxPoints(rect)
+            box = np.int0(box)
+
+            # draw the box
+            cv2.drawContours(draw_image, [box], 0, (0, 0, 0), 2)
+
+            # annotate the color of the box
+            cv2.putText(
+                draw_image,
+                c,
+                (int(rect[0][0]), int(rect[0][1])),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (0, 0, 0),
+                2,
+            )
+
+            # get the center of the box
+            center = rect[0]
+
+            # get two points corresponding to same side of the box
+            p1 = box[1]
+            p2 = box[2]
+
+            side_middle = (p1 + p2) / 2
+
+            # get the angle of the box
+            angle = np.arctan2(side_middle[1] - center[1], side_middle[0] - center[0])
+            
+            # draw the pose on the image from box center
+            draw_image = cv2.arrowedLine(
+                draw_image,
+                (int(center[0]), int(center[1])),
+                (
+                    int(center[0] + np.cos(angle) * 100),
+                    int(center[1] + np.sin(angle) * 100),
+                ),
+                (0, 0, 255),
+                2,
+            )
+
+            angles.append(angle)
+
+        self.debug_image_pub.publish(
+            self.bridge.cv2_to_imgmsg(draw_image, encoding="passthrough")
+        )
+
+        # add the angle to the detections
+        detected_masks = [(cdmask[0], cdmask[1], angle) for cdmask, angle in zip(detected_masks, angles)]
+
+        return len(cluttered_polygons)>0, detected_masks, cluttered_polygons
 
     def check_polygons(self, polygons: List[Set[Union[str, Polygon]]]) -> List[MultiPolygon]:
         cluttered_polygons = []
@@ -524,25 +572,32 @@ class ClearClutterAction(AbstractAction):
         # min_clearance from parameter server
         min_clearance = rospy.get_param("clutter/min_clearance")
 
+        cluttered_poly_indices = []
+
         # check if two or more polygons are close to each other
-        for c, polygon in polygons:
+        for i, (c, polygon) in enumerate(polygons):
             multipolygons = []
-            for _, other_polygon in polygons:
-                if polygon == other_polygon:
+            for j, (oc, other_polygon) in enumerate(polygons):
+                if i == j:
                     continue
 
                 if polygon.distance(other_polygon) < min_clearance:
                     multipolygons.append(other_polygon)
+                    cluttered_poly_indices.append(j)
 
             if len(multipolygons) > 0:
                 # add polygon to multipolygon
                 multipolygons.append(polygon)
+                cluttered_poly_indices.append(i)
                 # convert to multipolygon
                 multipolygons = MultiPolygon(multipolygons)
                 # make the multipolygon into single polygon
                 poly = multipolygons.convex_hull
                 # add multipolygon to list
                 cluttered_polygons.append(poly)
+
+        # get indices of non cluttered polygons
+        non_cluttered_poly_indices = [i for i in range(len(polygons)) if i not in cluttered_poly_indices]
 
         # check if any of the multipolygons are same and remove duplicates
         if len(cluttered_polygons) > 0:
@@ -553,7 +608,7 @@ class ClearClutterAction(AbstractAction):
         else:
             cluttered_multipolygons = []
 
-        return cluttered_multipolygons
+        return cluttered_multipolygons, non_cluttered_poly_indices
 
     def apply_mask_and_get_polygons(self, cv_image, mask) -> List[Polygon]:
         # apply mask
@@ -582,3 +637,35 @@ class ClearClutterAction(AbstractAction):
         ]
 
         return polygons
+
+    def apply_mask_and_get_masks(self, cv_image, mask):
+        '''
+        apply the color mask on the cv image to detect cubes
+        return the masks for each cube
+        '''
+        
+        # apply mask
+        res = cv2.bitwise_and(cv_image, cv_image, mask=mask)
+
+        # find contours for detecting cubes
+        contours, hierarchy = cv2.findContours(
+            mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
+        )
+
+        # remove small contours
+        contours = [c for c in contours if cv2.contourArea(c) > 1000]
+
+        # get the pixels lying inside the contours
+        masks = []
+        polygons = []
+        for c in contours:
+            # create mask
+            mask = np.zeros(cv_image.shape[:2], np.uint8)
+            # draw contour
+            cv2.drawContours(mask, [c], -1, 255, -1)
+            # add mask to list
+            masks.append(mask)
+            # convert to shapely polygon
+            polygons.append(Polygon(c.reshape((c.shape[0], c.shape[2]))))
+
+        return masks, polygons
