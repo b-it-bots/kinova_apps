@@ -46,9 +46,9 @@ object_map = {
     'cup': 'tableware',
     'bowl': 'tableware',
     'mug': 'tableware',
-    'smallbroom': 'cleaning',
-    'smalldustpan': 'cleaning',
-    'smallbrush': 'cleaning',
+    'broom': 'cleaning',
+    'dustpan': 'cleaning',
+    'brush': 'cleaning',
     'toothbrush': 'personal_care',
     'toothpaste': 'personal_care',
     'shampoo': 'personal_care',
@@ -122,7 +122,7 @@ class ClearClutterAction(AbstractAction):
         # go to perceive table pose
         # get pose from parameter server
         joint_angles_list = rospy.get_param("joint_angles")
-        perceive_table_joint_angles = joint_angles_list["data"]["perceive_table_slant"]
+        perceive_table_joint_angles = joint_angles_list["data"]["pt_middle"]
 
         # sort place angles
         sort_place_angles = rospy.get_param("sort_place_poses")
@@ -212,6 +212,8 @@ class ClearClutterAction(AbstractAction):
                 kpose.z += 0.13
                 # add 90 degrees to the orientation
                 kpose.theta_z_deg += 180
+                if self.object_type == ObjectType.REAL_OBJECTS:
+                    kpose.theta_z_deg += 90
                 success &= self.arm.send_cartesian_pose(kpose)
 
                 # go down
@@ -231,7 +233,7 @@ class ClearClutterAction(AbstractAction):
                     object_class = detections[i][0]
                 elif self.object_type == ObjectType.REAL_OBJECTS:
                     object_name = list(detections.keys())[i]
-                    object_class = object_map[object_name]
+                    object_class = object_map[object_name.lower()]
 
                 print(f"object class: {object_class}")
 
@@ -466,7 +468,7 @@ class ClearClutterAction(AbstractAction):
         polygons = {}
         detected_masks = {}
         for i, color in enumerate(colors):
-            dmask, polys = self.apply_mask_and_get_masks(cv_image, masks[i])
+            dmask, polys = self.apply_mask_and_get_masks_polygons(cv_image, masks[i])
             detected_masks[color] = dmask
             polygons[color] = polys
 
@@ -478,7 +480,6 @@ class ClearClutterAction(AbstractAction):
 
         # check if two or more polygons are close to each other
         cluttered_polygons, free_poly_indices = self.check_polygons(polygons)
-
 
         if len(cluttered_polygons) > 0:
             # draw cluttered polygons
@@ -492,7 +493,7 @@ class ClearClutterAction(AbstractAction):
                 self.bridge.cv2_to_imgmsg(draw_image, encoding="passthrough")
             )
 
-        angles = []
+        dms = []
         for i, (c, dmask) in enumerate(detected_masks):
             if i not in free_poly_indices:
                 continue
@@ -555,16 +556,13 @@ class ClearClutterAction(AbstractAction):
                 2,
             )
 
-            angles.append(angle)
+            dms.append((c, dmask, angle))
 
         self.debug_image_pub.publish(
             self.bridge.cv2_to_imgmsg(draw_image, encoding="passthrough")
         )
 
-        # add the angle to the detections
-        detected_masks = [(cdmask[0], cdmask[1], angle) for cdmask, angle in zip(detected_masks, angles)]
-
-        return len(cluttered_polygons)>0, detected_masks, cluttered_polygons
+        return len(cluttered_polygons)>0, dms, cluttered_polygons
 
     def check_polygons(self, polygons: List[Set[Union[str, Polygon]]]) -> List[MultiPolygon]:
         cluttered_polygons = []
@@ -610,38 +608,10 @@ class ClearClutterAction(AbstractAction):
 
         return cluttered_multipolygons, non_cluttered_poly_indices
 
-    def apply_mask_and_get_polygons(self, cv_image, mask) -> List[Polygon]:
-        # apply mask
-        res = cv2.bitwise_and(cv_image, cv_image, mask=mask)
-
-        # find contours for detecting cubes
-        contours, hierarchy = cv2.findContours(
-            mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
-        )
-
-        # remove small contours
-        contours = [c for c in contours if cv2.contourArea(c) > 1000]
-
-        # convert to polygons
-        polygons = [
-            cv2.approxPolyDP(c, 0.01 * cv2.arcLength(c, True), True)
-            for c in contours
-        ]
-
-        # smooth polygons
-        polygons = [cv2.convexHull(p) for p in polygons]
-
-        # convert to shapely polygons
-        polygons = [
-            Polygon(p.reshape((p.shape[0], p.shape[2]))) for p in polygons
-        ]
-
-        return polygons
-
-    def apply_mask_and_get_masks(self, cv_image, mask):
+    def apply_mask_and_get_masks_polygons(self, cv_image, mask):
         '''
         apply the color mask on the cv image to detect cubes
-        return the masks for each cube
+        return the masks and shapely polygons for each cube
         '''
         
         # apply mask

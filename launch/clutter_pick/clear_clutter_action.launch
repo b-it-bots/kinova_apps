@@ -30,7 +30,7 @@
     <!-- arg for model path -->
     <arg name="model_path" default="$(find kinova_apps)/models/$(arg app_name)/" />
     <!-- arg for model name -->
-    <arg name="model_name" default="yolov8x-seg.pt" />
+    <arg name="model_name" default="best_all_object.pt" />
 
     <!-- launch node with namespace -->
     <group ns="$(arg app_name)">

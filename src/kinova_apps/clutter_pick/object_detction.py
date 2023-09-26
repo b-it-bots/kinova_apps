@@ -18,7 +18,7 @@ class YoloDetector:
     def detect(self, img: Image):
         img = self.bridge.imgmsg_to_cv2(img, desired_encoding='passthrough')
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        results = self.model.predict(source=img, conf=0.25)
+        results = self.model.predict(source=img, conf=0.75)
 
         for r in results:
         
