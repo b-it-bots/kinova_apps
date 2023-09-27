@@ -9,14 +9,14 @@ from shapely.geometry import Polygon
 from collections import defaultdict
 
 
-OBJECTS = {'toothbrush': 79, 'cup': 41,'fork': 42,'knife': 43,'spoon': 44,'bowl': 45}
 GRIPPER_LEFT_POINTS = np.array([[140, 720],[224, 625],[296, 625],[300, 720],[132, 720]])
 GRIPPER_RIGHT_POINTS = np.array([[996, 720],[996, 720],[996, 720],[996, 720],[996, 629],[1072, 621],[1160, 720],[988, 720]])
 
 class YoloDetector:
 
-    def __init__(self, model='yolov8n.pt'):
+    def __init__(self, model='yolov8n.pt', handle_model='best_handle.pt'):
         self.model = YOLO(model)
+        self.handle_model = YOLO(handle_model)
         self.bridge = cv_bridge.CvBridge()
     
 
@@ -41,6 +41,17 @@ class YoloDetector:
         predicted_boxes = results[0].boxes.xyxy.cpu().numpy().astype(int)
 
         return frame, predicted_boxes
+
+    def get_handle_mask(self, img, mask):
+        res = cv2.bitwise_and(img,img,mask = mask)
+        results = self.handle_model.predict(source=res, conf=0.6, iou=0.45, retina_masks=True)
+
+        if len(results[0]) == 0:
+            print('no handle found')
+            return mask
+        return results[0].masks.data.cpu().numpy()[0]
+        
+
     
     def detect_segments(self, img:Image)->(np.array, List[str] ,List[np.array], List[Polygon]):
         '''
@@ -56,7 +67,7 @@ class YoloDetector:
         '''
 
         # convert image to numpy array
-        img = self.bridge.imgmsg_to_cv2(img, desired_encoding='passthrough')
+        #img = self.bridge.imgmsg_to_cv2(img, desired_encoding='passthrough')
         
         # convert image to RGB
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -66,13 +77,13 @@ class YoloDetector:
         cv2.fillPoly(img, pts=[GRIPPER_LEFT_POINTS, GRIPPER_RIGHT_POINTS], color=(0, 255, 0))
 
         # detect objects
-        results = self.model.predict(source=img, conf=0.6, iou=0.45, retina_masks=True)
+        results = self.model.predict(source=img, conf=0.75, iou=0.45, retina_masks=True)
         
         # plot results
         res_plotted = results[0].plot(boxes=True, labels=True)
 
         predicted_masks = results[0].masks.data.cpu().numpy()
-        predicted_segments = results[0].masks.segments
+        predicted_segments = results[0].masks.xy
         predicted_classes = results[0].boxes.cls
 
 
@@ -82,6 +93,9 @@ class YoloDetector:
 
         for i, mask in enumerate(predicted_masks):
             # check if mask is 
+
+            if self.model.names[int(predicted_classes[i])] in ['Dustpan', 'Brush']:
+                mask = self.get_handle_mask(img, mask.astype(np.uint8))
 
             classes.append(self.model.names[int(predicted_classes[i])])
             class_masks.append(mask)
@@ -93,22 +107,21 @@ class YoloDetector:
     
     
 
-""" if __name__ == '__main__':
+# if __name__ == '__main__':
 
-    # test detector
+#     # test detector
 
-    img = cv2.imread('/home/bk/competition/white/white022.jpg')
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+#     img = cv2.imread('/home/bk/competition/dataset/dataset/brush/brush_24.jpg')
+#     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-    detector = YoloDetector(model='/home/bk/competition/kinova_apps/models/clutter_picking/best_all_object.pt')
-    res_plotted, names,masks, polygons = detector.detect_segments(img)
+#     detector = YoloDetector(model='/home/bk/competition/kinova_apps/models/clutter_picking/best_run2.pt')
+#     res_plotted, names,masks, polygons = detector.detect_segments(img)
 
-    print(names)
+#     print(names)
 
-    for i, mask in enumerate(masks):
-        cv2.imshow(names[i], mask)
-        cv2.waitKey(0)
-    cv2.imshow('test', res_plotted)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
- """
+#     for i, mask in enumerate(masks):
+#         cv2.imshow(names[i], mask)
+#         cv2.waitKey(0)
+#     cv2.imshow('test', res_plotted)
+#     cv2.waitKey(0)
+#     cv2.destroyAllWindows()
