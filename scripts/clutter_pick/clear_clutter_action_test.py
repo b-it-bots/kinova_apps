@@ -39,9 +39,25 @@ class ClearClutterTest(object):
         self.fam.execute_gripper_command(0.0)
 
     def do(self):
-        if self.cc_action.do():
-            return True
+        
+        success = True
 
+        success &= self.cc_action.pre_perceive()
+        success &= self.cc_action.act()
+
+        node_name = rospy.get_name()
+        self.pick_objects = rospy.get_param(node_name + "/pick_objects")
+
+        if self.pick_objects:
+            while not self.cc_action.verify() and not rospy.is_shutdown():
+                rospy.loginfo("Trying to pick again")
+                success &= self.cc_action.act()
+            
+            rospy.loginfo('action finished')
+            return success
+        else:
+            rospy.loginfo("action finished")
+            return success
 
 if __name__ == "__main__":
     rospy.init_node("probe_test")

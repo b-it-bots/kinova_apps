@@ -403,8 +403,6 @@ class FullArmMovement:
         trajectory.use_optimal_blending = False
         trajectory.waypoints.append(waypoint)
 
-        print(trajectory.waypoints)
-
         try:
             res = self.validate_waypoint_list(trajectory)
         except rospy.ServiceException:
@@ -574,8 +572,8 @@ class FullArmMovement:
             # check for the z axis of the tooltip and stop if it is less than 0.111(m) (the z axis of the slider) from base frame
             current_pose = self.get_current_pose()
             if (
-                self.fm.force_limit_flag
-                or current_pose.z < tool_z_thresh
+                (self.fm.force_limit_flag) # and current_pose.z <= tool_z_thresh + 0.002 and current_pose.z >= tool_z_thresh - 0.002
+                or current_pose.z <= tool_z_thresh + 0.002
                 or abs(time_current - rospy.get_time()) >= time
             ):
                 dist_flag = True

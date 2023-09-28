@@ -11,6 +11,8 @@
     <arg name="gui" default="false" />
     <!-- arg object type: 0-cubes, 1-real objects -->
     <arg name="object_type" default="1" />
+    <!-- arg pick objects or not -->
+    <arg name="pick_objects" default="true" />
 
     <!-- launch load_config -->
     <include file="$(find kinova_apps)/launch/$(arg app_name)/load_config.launch">
@@ -28,7 +30,7 @@
     <!-- arg for model path -->
     <arg name="model_path" default="$(find kinova_apps)/models/$(arg app_name)/" />
     <!-- arg for model name -->
-    <arg name="model_name" default="best_segmentation.pt" />
+    <arg name="model_name" default="best_allround.pt" />
 
     <!-- launch node with namespace -->
     <group ns="$(arg app_name)">
@@ -40,6 +42,7 @@
             <param name="model_path" value="$(arg model_path)" />
             <param name="model_name" value="$(arg model_name)" />
             <param name="object_type" value="$(arg object_type)" />
+            <param name="pick_objects" value="$(arg pick_objects)" />
         </node>
     </group>
 </launch>
