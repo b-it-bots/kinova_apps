@@ -30,7 +30,9 @@
     <!-- arg for model path -->
     <arg name="model_path" default="$(find kinova_apps)/models/$(arg app_name)/" />
     <!-- arg for model name -->
-    <arg name="model_name" default="best_allround.pt" />
+    <arg name="model_name" default="best_whitebg.pt" />
+    <!-- arg for handle model name -->
+    <arg name="handle_model_name" default="best_handle_v1.pt" />
 
     <!-- launch node with namespace -->
     <group ns="$(arg app_name)">
@@ -41,6 +43,7 @@
             <remap from="camera_info_topic" to="/camera/color/camera_info" />
             <param name="model_path" value="$(arg model_path)" />
             <param name="model_name" value="$(arg model_name)" />
+            <param name="handle_model_name" value="$(arg handle_model_name)" />
             <param name="object_type" value="$(arg object_type)" />
             <param name="pick_objects" value="$(arg pick_objects)" />
         </node>

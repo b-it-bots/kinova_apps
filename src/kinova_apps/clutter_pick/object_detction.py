@@ -9,13 +9,14 @@ from shapely.geometry import Polygon
 from collections import defaultdict
 
 
-GRIPPER_LEFT_POINTS = np.array([[140, 720],[224, 625],[296, 625],[300, 720],[132, 720]])
-GRIPPER_RIGHT_POINTS = np.array([[996, 720],[996, 720],[996, 720],[996, 720],[996, 629],[1072, 621],[1160, 720],[988, 720]])
+GRIPPER_LEFT_POINTS = np.array([[0, 614],[180, 514],[216, 502],[224, 682],[180, 720],[36, 720],[0, 694],[0, 626]])
+GRIPPER_RIGHT_POINTS = np.array([[1128, 720],[1076, 674],[1072, 498],[1120, 502],[1280, 582],[1280, 702],[1280, 720],[1128, 720]])
 
 class YoloDetector:
 
     def __init__(self, model='yolov8n.pt', handle_model='best_handle.pt'):
         self.model = YOLO(model)
+        # self.og_model = YOLO('yolo8x-seg.pt')
         self.handle_model = YOLO(handle_model)
         self.bridge = cv_bridge.CvBridge()
     
@@ -48,7 +49,7 @@ class YoloDetector:
 
         if len(results[0]) == 0:
             print('no handle found')
-            return mask
+            return None
         return results[0].masks.data.cpu().numpy()[0]
         
 
@@ -67,17 +68,21 @@ class YoloDetector:
         '''
 
         # convert image to numpy array
-        #img = self.bridge.imgmsg_to_cv2(img, desired_encoding='passthrough')
+        img = self.bridge.imgmsg_to_cv2(img, desired_encoding='passthrough')
         
         # convert image to RGB
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         # add gripper masks
         
-        cv2.fillPoly(img, pts=[GRIPPER_LEFT_POINTS, GRIPPER_RIGHT_POINTS], color=(0, 255, 0))
+        cv2.fillPoly(img, pts=[GRIPPER_LEFT_POINTS, GRIPPER_RIGHT_POINTS], color=(255, 255, 255))
 
         # detect objects
         results = self.model.predict(source=img, conf=0.75, iou=0.45, retina_masks=True)
+
+        if len(results[0]) == 0:
+            print('no objects found')
+            return img, [], [], []
 
         # plot results
         res_plotted = results[0].plot(boxes=True, labels=True)
@@ -95,7 +100,11 @@ class YoloDetector:
             # check if mask is 
 
             if self.model.names[int(predicted_classes[i])] in ['Dustpan', 'Brush']:
+                print(f'getting the handle...')
                 mask = self.get_handle_mask(img, mask.astype(np.uint8))
+
+                if mask is None:
+                    continue
 
             classes.append(self.model.names[int(predicted_classes[i])])
             class_masks.append(mask)
