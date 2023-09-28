@@ -1,14 +1,14 @@
 clutter:
   hsv_ranges:
     red:
-      lower: [160, 175, 156]
+      lower: [160, 140, 130]
       upper: [179, 255, 255]
     orange:
       lower: [0, 100, 200]
       upper: [179, 175, 255]
     green:
-      lower: [60, 100, 90]
-      upper: [100, 255, 150]
+      lower: [60, 100, 60]
+      upper: [100, 255, 255]
     blue:
       lower: [100, 170, 190]
       upper: [150, 255, 255]
@@ -19,9 +19,9 @@ clutter:
       lower: [0, 0, 255]
       upper: [105, 102, 255]
     pink:
-      lower: [120, 30, 240]
-      upper: [179, 190, 255]
+      lower: [120, 30, 255]
+      upper: [140, 180, 255]
     purple:
       lower: [130, 180, 75]
       upper: [170, 230, 180]
-  min_clearance: 75 # pixels
+  min_clearance: 50 # pixels

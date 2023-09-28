@@ -58,6 +58,9 @@ class YoloDetector:
 
         # detect objects
         results = self.model.predict(source=img, conf=0.6, iou=0.45, retina_masks=True)
+
+        if len(results[0]) == 0:
+            return None, None, None
         
         # plot results
         res_plotted = results[0].plot(boxes=False)
