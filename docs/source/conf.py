@@ -7,8 +7,8 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'KinovaApps'
-copyright = '2023, Vamsi Kalagaturu'
-author = 'Vamsi Kalagaturu'
+copyright = '2023, www.h-brs.de/en/a2s/b-it-bots'
+author = 'www.h-brs.de/en/a2s/b-it-bots'
 release = '0.1'
 
 # -- General configuration ---------------------------------------------------
@@ -24,5 +24,5 @@ exclude_patterns = []
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = 'alabaster'
+html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']

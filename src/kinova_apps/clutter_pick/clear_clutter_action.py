@@ -48,13 +48,12 @@ object_map = {
     "fork": "utensils",
     "knife": "utensils",
     "spoon": "utensils",
-    "mini_fork": "utensils",
-    "circle_plate": "utensils",
-    "square_plate": "utensils",
-    "cutlery_container": "utensils",
+    "cutlery_container": "tableware",
+    "square_plate": "tableware",
+    "circle_plate": "tableware",
+    "mini_fork": "tableware",
     "cup": "tableware",
     "bowl": "tableware",
-    "mug": "tableware",
     "broom": "cleaning",
     "dustpan": "cleaning",
     "brush": "cleaning",
@@ -153,10 +152,12 @@ class ClearClutterAction(AbstractAction):
         node_name = rospy.get_name()
         model_path = rospy.get_param(node_name + "/model_path")
         model_name = rospy.get_param(node_name + "/model_name")
+        handle_model_name = rospy.get_param(node_name + "/handle_model_name")
 
         model = model_path + model_name
+        handle_model = model_path + handle_model_name
 
-        self.yolo_detector = YoloDetector(model)
+        self.yolo_detector = YoloDetector(model, handle_model)
 
         self.pick_objects = rospy.get_param(node_name + "/pick_objects")
 
@@ -164,11 +165,6 @@ class ClearClutterAction(AbstractAction):
         success = True
         # open gripper before picking
         success &= self.arm.execute_gripper_command(0.0)
-
-        # go to perceive table pose
-        # get pose from parameter server
-        # joint_angles_list = rospy.get_param("joint_angles")
-        # perceive_table_joint_angles = joint_angles_list["data"]["pt_middle"]
 
         # sort place angles
         sort_place_angles = rospy.get_param("sort_place_poses")
@@ -206,16 +202,30 @@ class ClearClutterAction(AbstractAction):
 
             (
                 debug_image,
-                detections,
+                classes,
+                class_masks,
                 polygons,
             ) = self.yolo_detector.detect_segments(self.rgb_image)
 
-            print(f"number of segment masks: {len(detections)}")
 
             # publish debug image
             self.debug_image_pub.publish(
                 self.bridge.cv2_to_imgmsg(debug_image, encoding="passthrough")
             )
+
+            detections = [(classes[i], class_masks[i]) for i in range(len(classes))]
+            print(f"number of detections: {len(detections)}")
+
+            if len(classes) == 0:
+                return [], []
+
+            big_objects = ['bowl', 'cup', 'square_plate', 'circle_plate', 'dustpan', 'brush', 'cutlery_container', 'soap']
+
+            # sort the detections based on big objects list. detections can have other objects
+            detections = sorted(detections, key=lambda x: big_objects.index(x[0].lower()) if x[0].lower() in big_objects else len(big_objects))
+
+            for i in range(len(detections)):
+                print(f"{detections[i][0]}")
 
         return detections, polygons
 
@@ -227,7 +237,7 @@ class ClearClutterAction(AbstractAction):
             # pose_names = ['perceive_table_slant_left', 'perceive_table_slant_right']
             pose_names = ['perceive_table']
         elif self.object_type == ObjectType.REAL_OBJECTS:
-            pose_names = [f'pose_{i}' for i in range(1, 5)]
+            pose_names = [f'pose_{i}' for i in range(1, 4)]
 
         # get poses from parameter server
         percieve_poses = []
@@ -244,6 +254,9 @@ class ClearClutterAction(AbstractAction):
             # perceive table
             detections, polygons = self.perceive_table()
 
+            if len(detections) == 0:
+                continue
+
             # process point cloud
             print("processing point cloud")
             self.process_point_cloud()
@@ -252,117 +265,179 @@ class ClearClutterAction(AbstractAction):
             polygon_rois, poses = self.get_point_cloud_clusters(detections)
 
             positions = None
-            if len(polygons) > 0:
-                positions = self.get_pose_of_clutter(polygons)
+            # if len(polygons) > 0:
+            #     positions = self.get_pose_of_clutter(polygons)
 
             print(f"number of rois: {len(polygon_rois)}")
 
             # publish pose array
             if self.debug:
                 # publish all the rois
-                # for i, roi in enumerate(polygon_rois):
-                #     pc = pc2.create_cloud_xyz32(
-                #         self.pc.header, roi.reshape((-1, 3))
-                #     )
-                #     self.pc_pub.publish(pc)
-                #     rospy.sleep(1)
+                for i, roi in enumerate(polygon_rois):
+                    pc = pc2.create_cloud_xyz32(
+                        self.pc.header, roi.reshape((-1, 3))
+                    )
+                    self.pc_pub.publish(pc)
+                    rospy.sleep(1)
 
                 pose_array = PoseArray()
                 pose_array.header.frame_id = self.reference_frame
-                pose_array.poses = [pose.pose for pose in poses]
+                if self.object_type == ObjectType.CUBES:
+                    pose_array.poses = [pose.pose for pose in poses]
+                else:
+                    pose_array.poses = [pose.pose for name, pose in poses]
                 self.pose_array_pub.publish(pose_array)
 
             if self.pick_objects:
                 # pick up the cubes one by one
                 for i, pose in enumerate(poses):
-                    print(f'picking up object {i}')
-                    kpose: KinovaPose = get_kinovapose_from_pose_stamped(pose)
+                    if self.object_type == ObjectType.REAL_OBJECTS:
+                        print()
+                        print(f'picking up object {pose[0]}')
+
+                        kpose: KinovaPose = get_kinovapose_from_pose_stamped(pose[1])
+                    else:
+                        kpose: KinovaPose = get_kinovapose_from_pose_stamped(pose)
 
                     if self.object_type == ObjectType.CUBES:
                         # open gripper
                         success &= self.arm.execute_gripper_command(0.55)
                     else:
+                        object_name = pose[0]
                         # open gripper
-                        if list(detections.keys())[i].lower() == "cup":
-                            success &= self.arm.execute_gripper_command(0.4)
-                        elif list(detections.keys())[i].lower() == "bowl":
-                            success &= self.arm.execute_gripper_command(0.2)
-                        else:
+                        if object_name == "cup" or object_name == "bowl" or object_name == "circle_plate":
+                            success &= self.arm.execute_gripper_command(0.6)
+                        elif object_name == "square_plate":
+                            success &= self.arm.execute_gripper_command(0.5)
+                        elif object_name == "soap":
                             success &= self.arm.execute_gripper_command(0.35)
+                        elif object_name == "shampoo":
+                            success &= self.arm.execute_gripper_command(0.45)
+                        elif object_name == "dustpan" or object_name == "brush":
+                            success &= self.arm.execute_gripper_command(0.55)
+                        elif object_name == "toothbrush" or object_name == "fork" or object_name == "knife" or object_name == "spoon" or object_name == "mini_fork" or object_name == "broom":
+                            success &= self.arm.execute_gripper_command(0.7)
+                        else:
+                            success &= self.arm.execute_gripper_command(0.5)
 
                     # adjust the z
-                    kpose.z += 0.10
                     # kpose.theta_z_deg += 180
                     if self.object_type == ObjectType.REAL_OBJECTS:
+                        if (pose[0] == "cup"
+                            or pose[0] == "bowl"
+                            or pose[0] == "circle_plate" 
+                            or pose[0] == "square_plate"):
+                            kpose.z += 0.15
+                        else:
+                            kpose.z += 0.1
                         kpose.theta_z_deg += 90
                     else:
+                        kpose.z += 0.1
                         kpose.theta_z_deg += 90
 
                     success &= self.arm.send_cartesian_pose(kpose)
 
-                    # if self.object_type == ObjectType.CUBES:
-                    #     # get the current pose
-                    #     current_pose = self.arm.get_current_pose()
-
-                    #     # get current joint angles
-                    #     msg: JointState = rospy.wait_for_message(
-                    #         "/my_gen3/base_feedback/joint_state", JointState
-                    #     )
-
-                    #     print(f"joint angles r: {msg.position}")
-
-                    #     joint_angles = [math.degrees(angle) for angle in msg.position]
-
-                    #     # convert to posestamped
-                    #     ps_pose = current_pose.to_pose_stamped()
-
-                    #     # transform to tool frame
-                    #     ps_pose = self.transform_utils.transformed_pose_with_retries(ps_pose, 'tool_frame')
-
-                    #     print(f"joint angles: {joint_angles}")
-
-                    #     if joint_angles[6] > 0:
-                    #         ps_pose.pose.position.y += 0.003
-                    #     else:
-                    #         ps_pose.pose.position.y -= 0.004
-
-                    #     # transform back to base_link frame
-                    #     ps_pose = self.transform_utils.transformed_pose_with_retries(ps_pose, 'base_link')
-
-                    #     # convert to kinova pose
-                    #     tkpose = get_kinovapose_from_pose_stamped(ps_pose)
-
-                    #     kpose.x = tkpose.x
-                    #     kpose.y = tkpose.y
-
-                    #     success &= self.arm.send_cartesian_pose(kpose)
-
                     # go down
-                    kpose.z -= 0.1
-                    if (
-                        self.object_type == ObjectType.REAL_OBJECTS
-                        and (list(detections.keys())[i].lower() == "cup"
-                        or list(detections.keys())[i].lower() == "bowl"
-                        or list(detections.keys())[i].lower() == "square_plate"
-                        or list(detections.keys())[i].lower() == "circle_plate")
-                    ):
-                        print(f"here z: {kpose.z}")
-                        kpose.z += 0.025
-                        success &= self.arm.send_cartesian_pose(kpose)
+                    if self.object_type == ObjectType.REAL_OBJECTS:
+                        if (pose[0] == "cup"
+                            or pose[0] == "bowl"
+                            or pose[0] == "circle_plate" 
+                            or pose[0] == "square_plate"):
+                            kpose.z -= 0.15
+                        else:
+                            kpose.z -= 0.1
                     else:
-                        
+                        kpose.z -= 0.1
+
+                    # get current pose
+                    current_pose = self.arm.get_current_pose()
+
+                    if ((current_pose.x > 0.45 and current_pose.y > 0.15)
+                        or (current_pose.x > 0.45 and current_pose.y < -0.19)
+                        or current_pose.x > 0.5):
+                        force_thresh = [6, 6, 6]
+                    else:
+                        force_thresh = [4, 4, 4]
+
+                    if (
+                        self.object_type == ObjectType.REAL_OBJECTS):
+                        if (pose[0] == "cup"):
+                            kpose.z += 0.045
+                            success &= self.arm.send_cartesian_pose(kpose)
+                            kpose.z += 0.15
+                        elif pose[0] == "circle_plate":
+                            kpose.z += 0.04
+                            success &= self.arm.send_cartesian_pose(kpose)
+                            kpose.z += 0.15
+                        elif pose[0] == "bowl":
+                            kpose.z += 0.055
+                            success &= self.arm.send_cartesian_pose(kpose)
+                            kpose.z += 0.15
+                        elif pose[0] == "square_plate":
+                            kpose.z = 0.05
+                            success &= self.arm.send_cartesian_pose(kpose)
+                            kpose.z += 0.15
+                        elif pose[0] == "dustpan" and kpose.z > 0.025:
+                            success &= self.arm.move_down_with_caution(
+                                0.1,
+                                force_threshold=force_thresh,
+                                tool_z_thresh=kpose.z + 0.005,
+                                retract_dist=0.04,
+                            )
+                            kpose.z += 0.15
+                        elif pose[0] == "brush" and kpose.z > 0.025:
+                            success &= self.arm.move_down_with_caution(
+                                0.1,
+                                force_threshold=force_thresh,
+                                tool_z_thresh=kpose.z + 0.005,
+                                retract_dist=0.005,
+                            )
+                            kpose.z += 0.15
+                        elif pose[0] == "shampoo":
+                            success &= self.arm.move_down_with_caution(
+                                0.1,
+                                force_threshold=force_thresh,
+                                tool_z_thresh=kpose.z + 0.005,
+                                retract_dist=0.03,
+                            )
+                            kpose.z += 0.15
+                        elif pose[0] == "mini_fork":
+                            success &= self.arm.move_down_with_caution(
+                                0.1,
+                                force_threshold=force_thresh,
+                                tool_z_thresh=kpose.z + 0.005,
+                                retract_dist=0.0,
+                            )
+                            kpose.z += 0.15
+                        elif pose[0] == "fork" or pose[0] == "knife" or pose[0] == "spoon" or pose[0] == "toothbrush":
+                            success &= self.arm.move_down_with_caution(
+                                0.1,
+                                force_threshold=force_thresh,
+                                tool_z_thresh=kpose.z + 0.005,
+                                retract_dist=0.005,
+                            )
+                            kpose.z += 0.15
+                        else:
+                            success &= self.arm.move_down_with_caution(
+                                0.1,
+                                force_threshold=force_thresh,
+                                tool_z_thresh=kpose.z + 0.005,
+                                retract_dist=0.01,
+                            )
+                            kpose.z += 0.15
+                    else:
                         success &= self.arm.move_down_with_caution(
                             0.1,
-                            force_threshold=[6, 6, 6],
+                            force_threshold=[4, 4, 4],
                             tool_z_thresh=kpose.z + 0.005,
-                            retract_dist=0.015,
+                            retract_dist=0.01,
                         )
+                        kpose.z += 0.15
 
                     # close gripper to pick
                     success &= self.arm.execute_gripper_command(1.0)
 
                     # go up
-                    kpose.z += 0.2
                     success &= self.arm.send_cartesian_pose(kpose)
 
                     # go to sort place
@@ -370,7 +445,7 @@ class ClearClutterAction(AbstractAction):
                     if self.object_type == ObjectType.CUBES:
                         object_class = detections[i].color
                     elif self.object_type == ObjectType.REAL_OBJECTS:
-                        object_name = list(detections.keys())[i]
+                        object_name = pose[0]
                         object_class = object_map[object_name.lower()]
 
                     print(f"object class: {object_class}")
@@ -388,21 +463,19 @@ class ClearClutterAction(AbstractAction):
                     # get current pose
                     current_pose = self.arm.get_current_pose()
 
+                    print(f"current pose: {current_pose}")
+
                     # if current pose x is less than 0, then move to safe pose
-                    if current_pose.x < 0 and current_pose.y > 0:
+                    if current_pose.x < 0.1 and current_pose.y > 0:
+                        print(f'moving to safe pose left')
                         success &= self.arm.send_joint_angles(
                             joint_angles_list["data"]["safe_pose_left"]
                         )
-                        # success &= self.arm.send_joint_angles(
-                        #     joint_angles_list["data"]["safe_pose_middle"]
-                        # )
-                    elif current_pose.x < 0 and current_pose.y < 0:
+                    elif current_pose.x < 0.1 and current_pose.y < 0:
+                        print(f'moving to safe pose right')
                         success &= self.arm.send_joint_angles(
                             joint_angles_list["data"]["safe_pose_right"]
                         )
-                        # success &= self.arm.send_joint_angles(
-                        #     joint_angles_list["data"]["safe_pose_middle"]
-                        # )
 
                     print(f'object placed!')
 
@@ -449,7 +522,7 @@ class ClearClutterAction(AbstractAction):
             # pose_names = ['perceive_table_slant_left', 'perceive_table_slant_right']
             pose_names = ['perceive_table']
         elif self.object_type == ObjectType.REAL_OBJECTS:
-            pose_names = [f'pose_{i}' for i in range(1, 5)]
+            pose_names = [f'pose_{i}' for i in range(1, 4)]
 
         # get poses from parameter server
         percieve_poses = []
@@ -609,7 +682,7 @@ class ClearClutterAction(AbstractAction):
                 pc = self.pc_array[element.mask.astype(bool)]
             else:
                 # get the point cloud from the mask
-                pc = self.pc_array[data[element].astype(bool)]
+                pc = self.pc_array[element[1].astype(bool)]
 
             # flatten the point cloud
             fpc = pc.reshape((-1, 3))
@@ -622,32 +695,25 @@ class ClearClutterAction(AbstractAction):
             min_z = np.min(fpc[:, 2])
 
             if self.object_type == ObjectType.REAL_OBJECTS:
-                print(f"element: {element}")
+                print(f"element: {element[0]}")
                 # if the element is 'cup'
-                element = element.lower()
+                element_name = element[0].lower()
+                if element_name == "cup" and max_z < 0.05:
+                    continue
                 if (
-                    element == "cup"
-                    or element == "bowl"
-                    or element == "mug"
-                    or element == "circle_plate"
+                    element_name == "cup"
+                    or element_name == "bowl"
+                    or element_name == "circle_plate"
                 ):
                     # crop the point cloud from the top to remove the handle
-                    fpc = fpc[fpc[:, 2] > max_z - 0.005]
-                    middle_z = max_z + 0.005
-                if element == "square_plate":
-                    fpc = fpc[fpc[:, 2] > max_z - 0.0025]
-                    middle_z = max_z + 0.0025
-                elif element == "brush" or element == "dustpan":
-                    # detect the handle
-                    eps = 0.01
-                    min_samples = 10
-                    dbscan = DBSCAN(eps=eps, min_samples=min_samples)
-                    labels = dbscan.fit_predict(fpc[:, :2])
-                    unique_labels, counts = np.unique(labels, return_counts=True)
-                    handle_label = unique_labels[np.argmin(counts)]
-                    handle_mask = (labels == handle_label)
-                    fpc = fpc[handle_mask]
-                    middle_z = max_z
+                    if element_name == 'bowl' and max_z > 0.06:
+                        # filter between 0.7 and 0.8
+                        fpc = fpc[
+                            np.logical_and(fpc[:, 2] > 0.06, fpc[:, 2] < 0.07)
+                        ]
+                    else:
+                        fpc = fpc[fpc[:, 2] > max_z - 0.005]
+                    middle_z = np.mean(fpc[:, 2]) - 0.02
                 else:
                     # get the average z value of the point cloud
                     middle_z = (max_z + min_z) / 2
@@ -658,14 +724,22 @@ class ClearClutterAction(AbstractAction):
 
             # get the mean of the point cloud
             if self.object_type == ObjectType.REAL_OBJECTS:
-                if element == "circle_plate" or element == "square_plate":
-                    # get a random point from the point cloud
-                    random_index = np.random.randint(0, len(fpc))
-                    # get a cluster of points around the random point
-                    fpc = fpc[
-                        np.linalg.norm(fpc - fpc[random_index], axis=1) < 0.01
-                    ]
+                if element_name == "circle_plate" or element_name == "bowl" or element_name == "cup":
+                    
+                    num_points = 0
+                    while num_points < 4:
+                        # get a random point from the point cloud
+                        random_index = np.random.randint(0, len(fpc))
+                        # get a cluster of points around the random point
+                        fpc = fpc[
+                            np.linalg.norm(fpc - fpc[random_index], axis=1) < 0.025
+                        ]
+                        num_points = len(fpc)
                     mean = np.mean(fpc, axis=0)
+                elif element_name == "square_plate":
+                    mean = np.mean(fpc, axis=0)
+                    # offset the x and y
+                    mean[1] += 0.075
                 else:
                     mean = np.mean(fpc, axis=0)
             else:
@@ -707,7 +781,7 @@ class ClearClutterAction(AbstractAction):
 
             # append to the list
             polys_pcs.append(fpc)
-            poses.append(pose)
+            poses.append((element[0].lower(), pose))
 
         return polys_pcs, poses
 
