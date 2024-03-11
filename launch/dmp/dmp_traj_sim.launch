@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+
+<launch>
+    <!-- Robot namespace -->
+    <arg name="robot_name" default="my_gen3" />
+    <!-- app name -->
+    <arg name="app_name" default="dmp" />
+    <!-- start delay -->
+    <arg name="start_delay_seconds" default="0" />
+    <!-- gui flag -->
+    <arg name="gui" default="false" />
+
+    <!-- launch node with namespace -->
+    <group ns="$(arg app_name)">
+        <node pkg="kinova_apps" type="traj_action_test.py" name="traj_action_test"
+            output="screen">
+        </node>
+    </group>
+</launch>
