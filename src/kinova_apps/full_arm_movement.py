@@ -504,6 +504,46 @@ class FullArmMovement:
                 break
             time.sleep(0.01)
         return success
+    
+    def send_constrained_pose(
+        self,
+        kpose: KinovaPose,
+    ):
+        success = True
+
+        my_cartesian_speed = CartesianSpeed()
+        my_cartesian_speed.translation = 0.1  # m/s
+        my_cartesian_speed.orientation = 15  # deg/s
+
+        pose = ConstrainedPose()
+        pose.target_pose.x = kpose.x
+        pose.target_pose.y = kpose.y
+        pose.target_pose.z = kpose.z
+        pose.target_pose.theta_x = kpose.theta_x_deg
+        pose.target_pose.theta_y = kpose.theta_y_deg
+        pose.target_pose.theta_z = kpose.theta_z_deg
+
+        pose.constraint.oneof_type.speed.append(my_cartesian_speed)
+
+        req = ExecuteActionRequest()
+        req.input.oneof_action_parameters.reach_pose.append(pose)
+        req.input.name = "pose1"
+        req.input.handle.action_type = ActionType.REACH_POSE
+        req.input.handle.identifier = 1001
+
+        rospy.loginfo("Sending pose...")
+        self.last_action_notif_type = None
+        try:
+            self.execute_action(req)
+        except rospy.ServiceException:
+            rospy.logerr("Failed to send pose")
+            success = False
+        else:
+            rospy.loginfo("Waiting for pose to finish...")
+
+        self.wait_for_action_end_or_abort()
+
+        return success
 
     def stop_arm_velocity(self):
         """
