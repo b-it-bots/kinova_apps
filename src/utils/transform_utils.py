@@ -18,7 +18,6 @@ from utils.kinova_pose import KinovaPose, get_kinovapose_from_pose_stamped
 
 
 class TransformUtils(object):
-
     """Transform Utils convert tf in different frames and also doiong retries"""
 
     def __init__(self):
@@ -42,9 +41,7 @@ class TransformUtils(object):
         """Transform pose with string names and any offset if provided"""
         ## Getting Pose of the board_link in the base_link
         msg = PoseStamped()
-        msg.header.frame_id = (
-            reference_frame_name  # board link is the name of tf
-        )
+        msg.header.frame_id = reference_frame_name  # board link is the name of tf
         # msg.header.stamp = rospy.Time.now()
 
         # rospy.Time(0) returns the latest available data for a specific transform,
@@ -168,9 +165,7 @@ class TransformUtils(object):
         )
 
         # Get the pose of the base_link with respect to the map
-        (trans, rot) = listener.lookupTransform(
-            target_link, source_link, rospy.Time(0)
-        )
+        (trans, rot) = listener.lookupTransform(target_link, source_link, rospy.Time(0))
 
         # Convert the translation and rotation to a PoseStamped message
         pose_msg = PoseStamped()
@@ -220,3 +215,25 @@ class TransformUtils(object):
             return None
 
         return do_transform_cloud(pc, trans)
+
+    def convert_to_euler(self, posestamped):
+        """Converts a posestamped to euler angles
+
+        :return: euler angles
+        :rtype: list
+        """
+        quaternion = [
+            posestamped.pose.orientation.x,
+            posestamped.pose.orientation.y,
+            posestamped.pose.orientation.z,
+            posestamped.pose.orientation.w,
+        ]
+        euler = tf.transformations.euler_from_quaternion(quaternion)
+        return [
+            posestamped.pose.position.x,
+            posestamped.pose.position.y,
+            posestamped.pose.position.z,
+            euler[0],
+            euler[1],
+            euler[2],
+        ]
